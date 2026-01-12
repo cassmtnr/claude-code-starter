@@ -1,6 +1,6 @@
-# Claude Code Framework
+# Claude Code Starter
 
-A lightweight framework for AI-assisted development. Drop it anywhere, run one command.
+A lightweight starter kit for AI-assisted development with Claude Code.
 
 **Version:** 0.0.2
 

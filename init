@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #
-# Claude Code Framework - Init Script
-# Version: 1.0.0
+# Claude Code Starter - Init Script
 #
 
 set -e
@@ -36,9 +35,9 @@ FRAMEWORK_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 # Help message
 show_help() {
     cat << EOF
-Claude Code Framework v${VERSION}
+Claude Code Starter v${VERSION}
 
-A lightweight framework for AI-assisted development with Claude Code.
+A lightweight starter kit for AI-assisted development with Claude Code.
 
 USAGE:
     npx claude-code-starter [OPTIONS]
@@ -132,9 +131,9 @@ validate_framework() {
 validate_framework
 
 # Show banner
-echo -e "${CYAN}╔═══════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║   Claude Code Framework v${VERSION}       ║${NC}"
-echo -e "${CYAN}╚═══════════════════════════════════════╝${NC}"
+echo -e "${CYAN}╔═════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║   Claude Code Starter v${VERSION}        ║${NC}"
+echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
 echo ""
 
 # Create .claude directory structure
