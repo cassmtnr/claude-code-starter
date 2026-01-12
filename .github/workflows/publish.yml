@@ -22,10 +22,8 @@ jobs:
       - name: Update version in files
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          # Update package.json
+          # Update package.json (single source of truth - init script reads from here)
           npm version $VERSION --no-git-tag-version --allow-same-version
-          # Update init script
-          sed -i "s/VERSION=\".*\"/VERSION=\"$VERSION\"/" init
           # Update README
           sed -i "s/\*\*Version:\*\* .*/\*\*Version:\*\* $VERSION/" README.md
 

@@ -5,8 +5,6 @@
 
 set -e
 
-VERSION="0.0.2"
-
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -31,6 +29,9 @@ if [ -L "$SCRIPT_PATH" ]; then
     fi
 fi
 FRAMEWORK_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+
+# Get version from package.json (single source of truth)
+VERSION=$(node -p "require('$FRAMEWORK_DIR/package.json').version")
 
 # Help message
 show_help() {
@@ -67,7 +68,7 @@ WHAT IT DOES:
     5. Creates initial task state
 
 MORE INFO:
-    https://github.com/cassianomon/claude-code-starter
+    https://github.com/cassmtnr/claude-code-starter
 EOF
 }
 

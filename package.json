@@ -15,8 +15,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cassianomon/claude-code-starter.git"
+    "url": "git+https://github.com/cassmtnr/claude-code-starter.git"
   },
+  "homepage": "https://github.com/cassmtnr/claude-code-starter#readme",
   "bin": {
     "claude-code-starter": "./init"
   },
