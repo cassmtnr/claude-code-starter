@@ -1,6 +1,6 @@
 {
   "name": "claude-code-starter",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "description": "A lightweight framework for AI-assisted development with Claude Code",
   "keywords": [
     "claude",
@@ -15,7 +15,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cassianomon/claude-code-starter"
+    "url": "git+https://github.com/cassianomon/claude-code-starter.git"
   },
   "bin": {
     "claude-code-starter": "./init"

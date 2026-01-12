@@ -2,7 +2,7 @@
 
 A lightweight framework for AI-assisted development. Drop it anywhere, run one command.
 
-**Version:** 1.0.0
+**Version:** 0.0.2
 
 ## Installation
 
@@ -52,7 +52,7 @@ npx claude-code-starter
 Output:
 ```
 ╔═══════════════════════════════════════╗
-║   Claude Code Framework v1.0.0        ║
+║   Claude Code Framework v0.0.2        ║
 ╚═══════════════════════════════════════╝
 
 Setting up framework files...
@@ -90,7 +90,7 @@ npx claude-code-starter
 Output:
 ```
 ╔═══════════════════════════════════════╗
-║   Claude Code Framework v1.0.0        ║
+║   Claude Code Framework v0.0.2        ║
 ╚═══════════════════════════════════════╝
 
 Setting up framework files...

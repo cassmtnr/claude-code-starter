@@ -6,7 +6,7 @@
 
 set -e
 
-VERSION="1.0.0"
+VERSION="0.0.2"
 
 # Colors
 GREEN='\033[0;32m'
@@ -19,8 +19,19 @@ NC='\033[0m'
 # Default options
 FORCE=false
 
-# Get framework directory
-FRAMEWORK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Get framework directory (resolve symlinks for npm global install)
+SCRIPT_PATH="$0"
+if [ -L "$SCRIPT_PATH" ]; then
+    # Resolve symlink
+    if command -v readlink >/dev/null 2>&1; then
+        SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+        # Handle relative symlinks
+        if [[ "$SCRIPT_PATH" != /* ]]; then
+            SCRIPT_PATH="$(dirname "$0")/$SCRIPT_PATH"
+        fi
+    fi
+fi
+FRAMEWORK_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
 # Help message
 show_help() {
