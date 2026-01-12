@@ -1,0 +1,34 @@
+{
+  "name": "claude-code-starter",
+  "version": "1.0.0",
+  "description": "A lightweight framework for AI-assisted development with Claude Code",
+  "keywords": [
+    "claude",
+    "ai",
+    "development",
+    "framework",
+    "cli",
+    "anthropic",
+    "claude-code"
+  ],
+  "author": "Cassiano Montanari",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cassianomon/claude-code-starter"
+  },
+  "bin": {
+    "claude-code-starter": "./init"
+  },
+  "files": [
+    "init",
+    "CLAUDE.md",
+    ".claude/commands/",
+    ".claude/skills/",
+    ".claude/settings.json",
+    ".claude/state/task.md"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
