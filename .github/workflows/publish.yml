@@ -36,7 +36,10 @@ jobs:
         run: npm version ${{ needs.get-version.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Update README
-        run: sed -i "s/\*\*Version:\*\* .*/\*\*Version:\*\* ${{ needs.get-version.outputs.version }}/" README.md
+        run: |
+          VERSION=${{ needs.get-version.outputs.version }}
+          sed -i "s/\*\*Version:\*\* .*/\*\*Version:\*\* $VERSION/" README.md
+          sed -i "s/Claude Code Starter v[0-9]*\.[0-9]*\.[0-9]*/Claude Code Starter v$VERSION/g" README.md
 
       - name: Publish
         run: npm publish
@@ -58,7 +61,10 @@ jobs:
         run: npm version ${{ needs.get-version.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Update README
-        run: sed -i "s/\*\*Version:\*\* .*/\*\*Version:\*\* ${{ needs.get-version.outputs.version }}/" README.md
+        run: |
+          VERSION=${{ needs.get-version.outputs.version }}
+          sed -i "s/\*\*Version:\*\* .*/\*\*Version:\*\* $VERSION/" README.md
+          sed -i "s/Claude Code Starter v[0-9]*\.[0-9]*\.[0-9]*/Claude Code Starter v$VERSION/g" README.md
 
       - name: Commit and push
         run: |

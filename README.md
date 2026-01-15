@@ -4,28 +4,11 @@ A lightweight starter kit for AI-assisted development with Claude Code.
 
 **Version:** 0.0.8
 
-## Installation
-
-```bash
-# Install globally via npm
-npm install -g claude-code-starter
-
-# Or use npx (no install required)
-npx claude-code-starter
-```
-
-After global installation, run with `claude-code-starter`. Or just use `npx` without installing.
-
 ## Quick Start
 
 ```bash
-# Navigate to your project
 cd /path/to/your-project
-
-# Initialize the framework
 npx claude-code-starter
-
-# Then start Claude:
 claude
 ```
 
@@ -52,7 +35,7 @@ npx claude-code-starter
 Output:
 ```
 ╔═══════════════════════════════════════╗
-║   Claude Code Framework v0.0.2        ║
+║   Claude Code Starter v0.0.8        ║
 ╚═══════════════════════════════════════╝
 
 Setting up framework files...
@@ -90,7 +73,7 @@ npx claude-code-starter
 Output:
 ```
 ╔═══════════════════════════════════════╗
-║   Claude Code Framework v0.0.2        ║
+║   Claude Code Starter v0.0.8        ║
 ╚═══════════════════════════════════════╝
 
 Setting up framework files...
@@ -463,14 +446,10 @@ Edit `.claude/settings.json` to customize for your stack.
 
 ### Init script fails on macOS
 
-The script is compatible with Bash 3.x (macOS default). If you see errors:
+The script is compatible with Bash 3.x (macOS default). If you see errors, check your bash version:
 
 ```bash
-# Check your bash version
 bash --version
-
-# If installed globally, run with explicit bash
-bash $(which claude-code-starter)
 ```
 
 ### Commands not recognized

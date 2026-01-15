@@ -27,7 +27,8 @@
     ".claude/commands/",
     ".claude/skills/",
     ".claude/settings.json",
-    ".claude/state/task.md"
+    ".claude/state/task.md",
+    ".claude/.version"
   ],
   "engines": {
     "node": ">=14.0.0"
