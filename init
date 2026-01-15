@@ -147,7 +147,7 @@ echo -e "${BLUE}Setting up framework files...${NC}"
 
 # Copy CLAUDE.md
 if [ ! -f "$PROJECT_DIR/CLAUDE.md" ] || [ "$FORCE" = true ]; then
-    cp -- "$FRAMEWORK_DIR/CLAUDE.md" "$PROJECT_DIR/CLAUDE.md"
+    cp -- "$FRAMEWORK_DIR/CLAUDE.md" "$PROJECT_DIR/CLAUDE.md" 2>/dev/null || true
     if [ "$FORCE" = true ] && [ -f "$PROJECT_DIR/CLAUDE.md" ]; then
         echo "  Updated CLAUDE.md (forced)"
     else
@@ -159,7 +159,7 @@ fi
 
 # Copy settings.json
 if [ ! -f "$PROJECT_DIR/.claude/settings.json" ] || [ "$FORCE" = true ]; then
-    cp -- "$FRAMEWORK_DIR/.claude/settings.json" "$PROJECT_DIR/.claude/settings.json"
+    cp -- "$FRAMEWORK_DIR/.claude/settings.json" "$PROJECT_DIR/.claude/settings.json" 2>/dev/null || true
     if [ "$FORCE" = true ] && [ -f "$PROJECT_DIR/.claude/settings.json" ]; then
         echo "  Updated .claude/settings.json (forced)"
     else
@@ -170,11 +170,11 @@ else
 fi
 
 # Copy commands (always update - these are framework-managed)
-cp -r -- "$FRAMEWORK_DIR/.claude/commands/"* "$PROJECT_DIR/.claude/commands/"
+cp -r -- "$FRAMEWORK_DIR/.claude/commands/"* "$PROJECT_DIR/.claude/commands/" 2>/dev/null || true
 echo "  Updated .claude/commands/"
 
 # Copy skills (always update - these are framework-managed)
-cp -r -- "$FRAMEWORK_DIR/.claude/skills/"* "$PROJECT_DIR/.claude/skills/"
+cp -r -- "$FRAMEWORK_DIR/.claude/skills/"* "$PROJECT_DIR/.claude/skills/" 2>/dev/null || true
 echo "  Updated .claude/skills/"
 
 # Write version file
