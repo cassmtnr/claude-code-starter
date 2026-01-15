@@ -2,7 +2,7 @@
 
 A lightweight starter kit for AI-assisted development with Claude Code.
 
-**Version:** 0.0.2
+**Version:** 0.0.8
 
 ## Installation
 
