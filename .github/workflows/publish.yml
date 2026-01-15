@@ -5,8 +5,48 @@ on:
     types: [created]
 
 jobs:
-  publish:
+  get-version:
+    name: Get Version
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Strip refs/tags/ prefix, then strip v and any dots before the version number
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#v}"
+          VERSION="${VERSION#.}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: get-version
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Update package.json
+        run: npm version ${{ needs.get-version.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Update README
+        run: sed -i "s/\*\*Version:\*\* .*/\*\*Version:\*\* ${{ needs.get-version.outputs.version }}/" README.md
+
+      - name: Publish
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  commit-version:
+    name: Commit Version to Repo
+    runs-on: ubuntu-latest
+    needs: [get-version, publish]
     permissions:
       contents: write
     steps:
@@ -14,32 +54,16 @@ jobs:
         with:
           ref: main
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+      - name: Update package.json
+        run: npm version ${{ needs.get-version.outputs.version }} --no-git-tag-version --allow-same-version
 
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Update README
+        run: sed -i "s/\*\*Version:\*\* .*/\*\*Version:\*\* ${{ needs.get-version.outputs.version }}/" README.md
 
-      - name: Update version in files
-        run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
-          # Update package.json (single source of truth - init script reads from here)
-          npm version $VERSION --no-git-tag-version --allow-same-version
-          # Update README
-          sed -i "s/\*\*Version:\*\* .*/\*\*Version:\*\* $VERSION/" README.md
-
-      - name: Publish to npm
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Commit version changes
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json README.md
-          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
+          git commit -m "chore: bump version to ${{ needs.get-version.outputs.version }}"
           git push origin main
