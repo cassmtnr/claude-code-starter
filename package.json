@@ -1,7 +1,7 @@
 {
   "name": "claude-code-starter",
   "version": "0.0.8",
-  "description": "A lightweight framework for AI-assisted development with Claude Code",
+  "description": "A lightweight starter kit for AI-assisted development with Claude Code",
   "keywords": [
     "claude",
     "ai",
@@ -13,24 +13,39 @@
   ],
   "author": "Cassiano Montanari",
   "license": "MIT",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cassmtnr/claude-code-starter.git"
   },
   "homepage": "https://github.com/cassmtnr/claude-code-starter#readme",
   "bin": {
-    "claude-code-starter": "./init"
+    "claude-code-starter": "./dist/cli.js"
   },
   "files": [
-    "init",
-    "CLAUDE.md",
-    ".claude/commands/",
-    ".claude/skills/",
-    ".claude/settings.json",
-    ".claude/state/task.md",
-    ".claude/.version"
+    "dist",
+    "templates"
   ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "picocolors": "^1.1.1",
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/prompts": "^2.4.9",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.17"
+  },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   }
 }
