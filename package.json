@@ -1,6 +1,6 @@
 {
   "name": "claude-code-starter",
-  "version": "0.0.8",
+  "version": "0.1.0",
   "description": "A lightweight starter kit for AI-assisted development with Claude Code",
   "keywords": [
     "claude",
