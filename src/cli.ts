@@ -121,7 +121,7 @@ ${pc.bold("USAGE")}
 ${pc.bold("OPTIONS")}
   -h, --help      Show this help message
   -v, --version   Show version number
-  -f, --force     Force overwrite of CLAUDE.md and settings.json
+  -f, --force     Force overwrite of .claude/CLAUDE.md and settings.json
 
 ${pc.bold("MORE INFO")}
   https://github.com/cassmtnr/claude-code-starter
@@ -170,16 +170,16 @@ async function main(): Promise<void> {
 
   console.log(pc.blue("Setting up framework files..."));
 
-  // Copy CLAUDE.md
+  // Copy CLAUDE.md to .claude folder
   const claudeMdResult = copyFile(
     path.join(TEMPLATES_DIR, "CLAUDE.md"),
-    path.join(projectDir, "CLAUDE.md"),
+    path.join(projectDir, ".claude", "CLAUDE.md"),
     args.force
   );
   if (claudeMdResult === "skipped") {
-    console.log("  CLAUDE.md exists (use --force to overwrite)");
+    console.log("  .claude/CLAUDE.md exists (use --force to overwrite)");
   } else {
-    console.log(`  ${claudeMdResult === "updated" ? "Updated" : "Created"} CLAUDE.md`);
+    console.log(`  ${claudeMdResult === "updated" ? "Updated" : "Created"} .claude/CLAUDE.md`);
   }
 
   // Copy settings.json

@@ -6,8 +6,8 @@ Claude Code Starter is a CLI tool that scaffolds a `.claude/` directory structur
 
 ```
 your-project/
-├── CLAUDE.md              # Instructions for Claude
 └── .claude/
+    ├── CLAUDE.md          # Instructions for Claude
     ├── settings.json      # Claude Code permissions
     ├── .version           # Installed framework version
     ├── commands/          # Slash commands (/task, /status, etc.)
@@ -34,7 +34,7 @@ claude-code-starter/
 │   ├── cli.ts           # Main CLI entry point
 │   └── cli.test.ts      # Unit tests
 ├── templates/           # Files copied to user projects
-│   ├── CLAUDE.md
+│   ├── CLAUDE.md        # → copied to .claude/CLAUDE.md
 │   ├── settings.json
 │   ├── commands/
 │   ├── skills/

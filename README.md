@@ -13,7 +13,7 @@ claude
 ## What It Does
 
 Sets up your project with:
-- `CLAUDE.md` - Instructions for Claude
+- `.claude/CLAUDE.md` - Instructions for Claude
 - `.claude/commands/` - Slash commands (`/task`, `/status`, `/done`, `/analyze`)
 - `.claude/skills/` - Methodology guides (debugging, testing, patterns)
 - `.claude/state/task.md` - Task tracking
