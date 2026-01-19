@@ -26,19 +26,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: oven-sh/setup-bun@v2
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install
 
       - name: Update version
         run: npm version ${{ needs.get-version.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Build
-        run: npm run build
+        run: bun run build
+
+      - name: Test
+        run: bun test
 
       - name: Publish
         run: npm publish

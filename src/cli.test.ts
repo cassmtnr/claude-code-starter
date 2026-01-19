@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { parseArgs, detectProject, copyFile, copyDir } from "./cli.js";
+import { parseArgs, detectProject, copyFile, copyDir, getVersion, getTemplatesDir } from "./cli.js";
 
 // ============================================================================
 // parseArgs Tests
@@ -85,150 +85,35 @@ describe("detectProject", () => {
   it("should detect empty directory as new project", () => {
     const result = detectProject(testDir);
     expect(result.isExisting).toBe(false);
-    expect(result.techStack).toEqual([]);
-    expect(result.frameworks).toEqual([]);
-    expect(result.directories).toEqual([]);
     expect(result.fileCount).toBe(0);
   });
 
-  it("should detect Node.js project", () => {
-    fs.writeFileSync(path.join(testDir, "package.json"), '{"name": "test"}');
+  it("should detect existing project with source files", () => {
+    fs.writeFileSync(path.join(testDir, "index.ts"), "");
+    fs.writeFileSync(path.join(testDir, "app.py"), "");
     const result = detectProject(testDir);
     expect(result.isExisting).toBe(true);
-    expect(result.techStack).toContain("Node.js");
+    expect(result.fileCount).toBe(2);
   });
 
-  it("should detect TypeScript project", () => {
-    fs.writeFileSync(path.join(testDir, "tsconfig.json"), "{}");
-    const result = detectProject(testDir);
-    expect(result.isExisting).toBe(true);
-    expect(result.techStack).toContain("TypeScript");
-  });
-
-  it("should detect Python project with requirements.txt", () => {
-    fs.writeFileSync(path.join(testDir, "requirements.txt"), "flask==2.0.0");
-    const result = detectProject(testDir);
-    expect(result.isExisting).toBe(true);
-    expect(result.techStack).toContain("Python");
-  });
-
-  it("should detect Python project with pyproject.toml", () => {
-    fs.writeFileSync(path.join(testDir, "pyproject.toml"), "[project]");
-    const result = detectProject(testDir);
-    expect(result.isExisting).toBe(true);
-    expect(result.techStack).toContain("Python");
-  });
-
-  it("should detect Rust project", () => {
-    fs.writeFileSync(path.join(testDir, "Cargo.toml"), "[package]");
-    const result = detectProject(testDir);
-    expect(result.isExisting).toBe(true);
-    expect(result.techStack).toContain("Rust");
-  });
-
-  it("should detect Go project", () => {
-    fs.writeFileSync(path.join(testDir, "go.mod"), "module test");
-    const result = detectProject(testDir);
-    expect(result.isExisting).toBe(true);
-    expect(result.techStack).toContain("Go");
-  });
-
-  it("should detect Java project with pom.xml", () => {
-    fs.writeFileSync(path.join(testDir, "pom.xml"), "<project></project>");
-    const result = detectProject(testDir);
-    expect(result.isExisting).toBe(true);
-    expect(result.techStack).toContain("Java");
-  });
-
-  it("should detect Java/Kotlin project with build.gradle", () => {
-    fs.writeFileSync(path.join(testDir, "build.gradle"), "plugins {}");
-    const result = detectProject(testDir);
-    expect(result.isExisting).toBe(true);
-    expect(result.techStack).toContain("Java/Kotlin");
-  });
-
-  it("should detect Ruby project", () => {
-    fs.writeFileSync(path.join(testDir, "Gemfile"), 'source "https://rubygems.org"');
-    const result = detectProject(testDir);
-    expect(result.isExisting).toBe(true);
-    expect(result.techStack).toContain("Ruby");
-  });
-
-  it("should detect src directory", () => {
-    fs.mkdirSync(path.join(testDir, "src"));
-    const result = detectProject(testDir);
-    expect(result.isExisting).toBe(true);
-    expect(result.directories).toContain("src");
-  });
-
-  it("should detect multiple directories", () => {
-    fs.mkdirSync(path.join(testDir, "src"));
-    fs.mkdirSync(path.join(testDir, "tests"));
-    fs.mkdirSync(path.join(testDir, "lib"));
-    const result = detectProject(testDir);
-    expect(result.directories).toContain("src");
-    expect(result.directories).toContain("tests");
-    expect(result.directories).toContain("lib");
-  });
-
-  it("should detect React framework", () => {
-    fs.writeFileSync(
-      path.join(testDir, "package.json"),
-      JSON.stringify({ dependencies: { react: "^18.0.0" } })
-    );
-    const result = detectProject(testDir);
-    expect(result.frameworks).toContain("React");
-  });
-
-  it("should detect Next.js framework", () => {
-    fs.writeFileSync(
-      path.join(testDir, "package.json"),
-      JSON.stringify({ dependencies: { next: "^14.0.0" } })
-    );
-    const result = detectProject(testDir);
-    expect(result.frameworks).toContain("Next.js");
-  });
-
-  it("should detect Vue framework", () => {
-    fs.writeFileSync(
-      path.join(testDir, "package.json"),
-      JSON.stringify({ dependencies: { vue: "^3.0.0" } })
-    );
-    const result = detectProject(testDir);
-    expect(result.frameworks).toContain("Vue");
-  });
-
-  it("should detect Express framework", () => {
-    fs.writeFileSync(
-      path.join(testDir, "package.json"),
-      JSON.stringify({ dependencies: { express: "^4.0.0" } })
-    );
-    const result = detectProject(testDir);
-    expect(result.frameworks).toContain("Express");
-  });
-
-  it("should count source files", () => {
-    fs.mkdirSync(path.join(testDir, "src"));
-    fs.writeFileSync(path.join(testDir, "src", "index.ts"), "");
-    fs.writeFileSync(path.join(testDir, "src", "app.ts"), "");
-    fs.writeFileSync(path.join(testDir, "src", "utils.js"), "");
-    const result = detectProject(testDir);
-    expect(result.fileCount).toBe(3);
-  });
-
-  it("should ignore node_modules", () => {
+  it("should ignore patterns from .gitignore", () => {
+    fs.writeFileSync(path.join(testDir, ".gitignore"), "node_modules\ndist\n");
     fs.mkdirSync(path.join(testDir, "node_modules"));
     fs.writeFileSync(path.join(testDir, "node_modules", "dep.js"), "");
+    fs.mkdirSync(path.join(testDir, "dist"));
+    fs.writeFileSync(path.join(testDir, "dist", "bundle.js"), "");
+    fs.writeFileSync(path.join(testDir, "src.ts"), ""); // not ignored
     const result = detectProject(testDir);
-    expect(result.fileCount).toBe(0);
+    expect(result.isExisting).toBe(true);
+    expect(result.fileCount).toBe(1);
   });
 
-  it("should not duplicate tech stack entries", () => {
-    fs.writeFileSync(path.join(testDir, "requirements.txt"), "");
-    fs.writeFileSync(path.join(testDir, "pyproject.toml"), "");
+  it("should always ignore .git", () => {
+    fs.mkdirSync(path.join(testDir, ".git"));
+    fs.writeFileSync(path.join(testDir, ".git", "config"), "");
     const result = detectProject(testDir);
-    const pythonCount = result.techStack.filter((t) => t === "Python").length;
-    expect(pythonCount).toBe(1);
+    expect(result.isExisting).toBe(false);
+    expect(result.fileCount).toBe(0);
   });
 });
 
@@ -331,4 +216,35 @@ describe("copyDir", () => {
     copyDir(srcDir, destDir);
     expect(fs.readFileSync(path.join(destDir, "file.txt"), "utf-8")).toBe("new content");
   });
+
+  it("should handle empty source directory", () => {
+    copyDir(srcDir, destDir);
+    expect(fs.existsSync(destDir)).toBe(true);
+    expect(fs.readdirSync(destDir)).toEqual([]);
+  });
 });
+
+// ============================================================================
+// getVersion Tests
+// ============================================================================
+
+describe("getVersion", () => {
+  it("should return a valid semver version string", () => {
+    const version = getVersion();
+    expect(typeof version).toBe("string");
+    expect(version).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
+// ============================================================================
+// getTemplatesDir Tests
+// ============================================================================
+
+describe("getTemplatesDir", () => {
+  it("should return a path ending with templates", () => {
+    const templatesDir = getTemplatesDir();
+    expect(typeof templatesDir).toBe("string");
+    expect(templatesDir.endsWith("templates")).toBe(true);
+  });
+});
+

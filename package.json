@@ -27,23 +27,22 @@
     "templates"
   ],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "start": "node dist/cli.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "build": "bun run tsup",
+    "dev": "bun run tsup --watch",
+    "start": "bun dist/cli.js",
+    "test": "bun test",
+    "typecheck": "bun run tsc --noEmit",
+    "prepublishOnly": "bun run build && bun run test"
   },
   "dependencies": {
     "picocolors": "^1.1.1",
     "prompts": "^2.4.2"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/bun": "latest",
     "@types/prompts": "^2.4.9",
     "tsup": "^8.3.5",
-    "typescript": "^5.7.2",
-    "vitest": "^4.0.17"
+    "typescript": "^5.7.2"
   },
   "engines": {
     "node": ">=18.0.0"

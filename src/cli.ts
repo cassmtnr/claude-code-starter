@@ -22,9 +22,6 @@ export interface Args {
 
 export interface ProjectInfo {
   isExisting: boolean;
-  techStack: string[];
-  frameworks: string[];
-  directories: string[];
   fileCount: number;
 }
 
@@ -41,87 +38,40 @@ export function parseArgs(args: string[]): Args {
 }
 
 export function detectProject(projectDir: string): ProjectInfo {
-  const techStack: string[] = [];
-  const frameworks: string[] = [];
-  const directories: string[] = [];
-  let isExisting = false;
-
-  // Check for project files
-  const checks: [string, string][] = [
-    ["package.json", "Node.js"],
-    ["tsconfig.json", "TypeScript"],
-    ["requirements.txt", "Python"],
-    ["pyproject.toml", "Python"],
-    ["Cargo.toml", "Rust"],
-    ["go.mod", "Go"],
-    ["pom.xml", "Java"],
-    ["build.gradle", "Java/Kotlin"],
-    ["Gemfile", "Ruby"],
-  ];
-
-  for (const [file, tech] of checks) {
-    if (fs.existsSync(path.join(projectDir, file))) {
-      if (!techStack.includes(tech)) techStack.push(tech);
-      isExisting = true;
-    }
-  }
-
-  // Check for key directories
-  const keyDirs = ["src", "lib", "app", "api", "components", "pages", "tests", "test"];
-  for (const dir of keyDirs) {
-    if (fs.existsSync(path.join(projectDir, dir))) {
-      directories.push(dir);
-      isExisting = true;
-    }
-  }
-
-  // Detect frameworks from package.json
-  const pkgPath = path.join(projectDir, "package.json");
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = fs.readFileSync(pkgPath, "utf-8");
-      const frameworkChecks: [string, string][] = [
-        ['"react"', "React"],
-        ['"next"', "Next.js"],
-        ['"vue"', "Vue"],
-        ['"express"', "Express"],
-        ['"fastify"', "Fastify"],
-        ['"@nestjs"', "NestJS"],
-      ];
-      for (const [pattern, name] of frameworkChecks) {
-        if (pkg.includes(pattern)) frameworks.push(name);
-      }
-    } catch {
-      // Ignore read errors
-    }
-  }
-
-  // Count source files (simple approach)
   let fileCount = 0;
-  const extensions = [".js", ".ts", ".tsx", ".py", ".go", ".rs", ".java", ".rb"];
-  const ignoreDirs = ["node_modules", ".git", "dist", "build", ".claude"];
+  const extensions = [".js", ".ts", ".tsx", ".py", ".go", ".rs", ".java", ".rb", ".c", ".cpp", ".cs", ".swift", ".kt"];
+
+  // Read .gitignore patterns, always ignore .git
+  const ignorePatterns = [".git"];
+  const gitignorePath = path.join(projectDir, ".gitignore");
+  if (fs.existsSync(gitignorePath)) {
+    const lines = fs.readFileSync(gitignorePath, "utf-8").split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("#")) {
+        ignorePatterns.push(trimmed.replace(/\/$/, "")); // remove trailing slash
+      }
+    }
+  }
+
+  function shouldIgnore(name: string): boolean {
+    return ignorePatterns.some((pattern) => name === pattern || name.startsWith(pattern + "/"));
+  }
 
   function countFiles(dir: string, depth = 0): void {
     if (depth > 3) return;
-    try {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (ignoreDirs.includes(entry.name)) continue;
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          countFiles(fullPath, depth + 1);
-        } else if (extensions.some((ext) => entry.name.endsWith(ext))) {
-          fileCount++;
-          isExisting = true;
-        }
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (shouldIgnore(entry.name)) continue;
+      if (entry.isDirectory()) {
+        countFiles(path.join(dir, entry.name), depth + 1);
+      } else if (extensions.some((ext) => entry.name.endsWith(ext))) {
+        fileCount++;
       }
-    } catch {
-      // Ignore read errors
     }
   }
   countFiles(projectDir);
 
-  return { isExisting, techStack, frameworks, directories, fileCount };
+  return { isExisting: fileCount > 0, fileCount };
 }
 
 export function copyDir(src: string, dest: string): void {
@@ -260,21 +210,7 @@ async function main(): Promise<void> {
   const project = detectProject(projectDir);
 
   if (project.isExisting) {
-    console.log(pc.green("Detected existing project"));
-    if (project.techStack.length > 0) {
-      console.log(`Tech stack: ${pc.cyan(project.techStack.join(" "))}`);
-    }
-    console.log();
-
-    console.log(pc.blue("Analyzing codebase..."));
-    console.log();
-    console.log(`  Files: ${project.fileCount} source files`);
-    if (project.directories.length > 0) {
-      console.log(`  Directories: ${project.directories.map((d) => d + "/").join(" ")}`);
-    }
-    if (project.frameworks.length > 0) {
-      console.log(`  Frameworks: ${project.frameworks.join(" ")}`);
-    }
+    console.log(pc.green(`Existing project · ${project.fileCount} files`));
     console.log();
 
     // Create task file if it doesn't exist

@@ -2,3 +2,15 @@ node_modules/
 dist/
 *.log
 .DS_Store
+bun.lock
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Test coverage
+coverage/
