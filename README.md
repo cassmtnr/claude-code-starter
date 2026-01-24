@@ -267,6 +267,70 @@ echo ".claude/" >> ~/.gitignore
 git config --global core.excludesfile ~/.gitignore
 ```
 
+## CI/CD
+
+This project uses GitHub Actions for continuous integration and automated releases.
+
+### PR Checks (`.github/workflows/pr-check.yml`)
+
+Every pull request targeting `main` runs:
+
+| Check | Description |
+|-------|-------------|
+| **Lint** | Biome lint and format validation |
+| **Type Check** | TypeScript compilation check |
+| **Unit Tests** | Full test suite with Bun |
+| **Code Quality** | Checks for console.log, `any` types, skipped tests |
+| **Build** | Verifies package builds successfully |
+| **Package Size** | Reports bundle size (warns if > 500KB) |
+
+### Automated Releases (`.github/workflows/release.yml`)
+
+When code is merged to `main`, semantic-release automatically:
+
+1. Analyzes commit messages (conventional commits)
+2. Determines version bump (major/minor/patch)
+3. Updates `package.json` version
+4. Generates `CHANGELOG.md`
+5. Creates GitHub release with notes
+6. Publishes to npm registry
+
+### Conventional Commits
+
+Use these prefixes for automatic versioning:
+
+| Prefix | Version Bump | Example |
+|--------|--------------|---------|
+| `feat:` | Minor | `feat: add dark mode support` |
+| `fix:` | Patch | `fix: resolve memory leak` |
+| `perf:` | Patch | `perf: optimize image loading` |
+| `BREAKING CHANGE:` | Major | `feat!: redesign API` |
+| `docs:`, `chore:`, `ci:` | No release | `docs: update README` |
+
+### Required Secrets
+
+Configure these in your GitHub repository settings:
+
+| Secret | Description | Required For |
+|--------|-------------|--------------|
+| `NPM_TOKEN` | npm authentication token | Publishing to npm |
+| `GITHUB_TOKEN` | Auto-provided by GitHub | Creating releases |
+
+To create an npm token:
+1. Go to [npmjs.com](https://npmjs.com) → Access Tokens
+2. Generate a new "Automation" token
+3. Add it as `NPM_TOKEN` in GitHub repo → Settings → Secrets
+
+### Branch Protection (Recommended)
+
+Configure these settings for the `main` branch:
+
+- ✅ Require a pull request before merging
+- ✅ Require status checks to pass before merging
+  - Required checks: `lint`, `typecheck`, `test`, `build`, `pr-check-complete`
+- ✅ Require branches to be up to date before merging
+- ✅ Do not allow bypassing the above settings
+
 ## Development
 
 ```bash
@@ -281,6 +345,12 @@ bun test
 
 # Build
 bun run build
+
+# Lint
+bun run lint
+
+# Type check
+bun run typecheck
 ```
 
 ## License
