@@ -1,3 +1,9 @@
+## [0.2.0](https://github.com/cassmtnr/claude-code-starter/compare/0.1.3...0.2.0) (2026-01-24)
+
+### Features
+
+* add CI/CD workflows for PR checks and automated releases with semantic-release ([879cb0c](https://github.com/cassmtnr/claude-code-starter/commit/879cb0ce2cbbb771ac0b96850ea73d88548984bd))
+
 ## [0.1.0](https://github.com/cassmtnr/claude-code-starter/compare/v0.0.9...v0.1.0) (2026-01-24)
 
 ### Features
