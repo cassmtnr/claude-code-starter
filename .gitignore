@@ -16,6 +16,7 @@ bun.lock
 coverage/
 
 # AI Agent tooling
+.claude/
 .agent/
 .ralph/
 ralph.yml
