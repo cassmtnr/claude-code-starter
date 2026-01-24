@@ -33,7 +33,7 @@ jobs:
         run: bun run lint
 
       - name: Check formatting
-        run: bun run biome format --check src/
+        run: bun run biome check src/
 
   typecheck:
     name: Type Check
@@ -149,8 +149,8 @@ jobs:
 
       - name: Check for skipped tests
         run: |
-          # Check for .skip, .only, or xit/xdescribe
-          if grep -rn "\.skip\|\.only\|xit(\|xdescribe(" --include="*.test.ts" --include="*.spec.ts" --exclude-dir=node_modules src/ 2>/dev/null; then
+          # Check for .skip(, .only(, xit(, xdescribe( - must be followed by parenthesis to avoid false positives
+          if grep -rn "\.skip(\|\.only(\|xit(\|xdescribe(" --include="*.test.ts" --include="*.spec.ts" --exclude-dir=node_modules src/ 2>/dev/null; then
             echo "::error::Found skipped or focused tests. Please remove .skip/.only before merging."
             exit 1
           fi

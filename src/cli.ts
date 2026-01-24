@@ -94,17 +94,16 @@ ${pc.bold("MORE INFO")}
 }
 
 function showBanner(): void {
-  console.log(pc.cyan("╔═════════════════════════════════════════════════╗"));
-  console.log(pc.cyan(`║   Claude Code Starter v${VERSION.padEnd(24)}║`));
-  console.log(pc.cyan("║   Intelligent AI-Assisted Development Setup     ║"));
-  console.log(pc.cyan("╚═════════════════════════════════════════════════╝"));
+  console.log();
+  console.log(pc.bold("Claude Code Starter") + pc.gray(` v${VERSION}`));
+  console.log(pc.gray("Intelligent AI-Assisted Development Setup"));
   console.log();
 }
 
 function showTechStack(projectInfo: ProjectInfo, verbose: boolean): void {
   const { techStack } = projectInfo;
 
-  console.log(pc.blue("📊 Tech Stack Analysis"));
+  console.log(pc.bold("Tech Stack"));
   console.log();
 
   if (techStack.primaryLanguage) {
@@ -152,7 +151,7 @@ async function promptNewProject(args: Args): Promise<NewProjectPreferences | nul
     return null;
   }
 
-  console.log(pc.yellow("🆕 New project detected - let's set it up!"));
+  console.log(pc.yellow("New project detected - let's set it up!"));
   console.log();
 
   const response = await prompts([
@@ -366,7 +365,7 @@ async function main(): Promise<void> {
   const projectDir = process.cwd();
 
   // Step 1: Analyze the repository
-  console.log(pc.blue("🔍 Analyzing repository..."));
+  console.log(pc.gray("Analyzing repository..."));
   console.log();
 
   const projectInfo = analyzeRepository(projectDir);
@@ -390,13 +389,13 @@ async function main(): Promise<void> {
       projectInfo.description = preferences.description;
     }
   } else {
-    console.log(pc.green(`📁 Existing project · ${projectInfo.fileCount} source files`));
+    console.log(pc.gray(`Existing project with ${projectInfo.fileCount} source files`));
     console.log();
   }
 
   // Step 3: Check for existing Claude configuration
   if (projectInfo.techStack.hasClaudeConfig && !args.force) {
-    console.log(pc.yellow("⚠️  Existing .claude/ configuration detected"));
+    console.log(pc.yellow("Existing .claude/ configuration detected"));
     console.log();
 
     if (args.interactive) {
@@ -416,7 +415,7 @@ async function main(): Promise<void> {
   }
 
   // Step 4: Generate artifacts
-  console.log(pc.blue("⚙️  Generating Claude Code configuration..."));
+  console.log(pc.gray("Generating configuration..."));
   console.log();
 
   const result = generateArtifacts(projectInfo);
@@ -426,23 +425,23 @@ async function main(): Promise<void> {
 
   // Show results
   if (created.length > 0) {
-    console.log(pc.green("  Created:"));
+    console.log(pc.green("Created:"));
     for (const file of created) {
-      console.log(pc.green(`    ✓ ${file}`));
+      console.log(pc.green(`  + ${file}`));
     }
   }
 
   if (updated.length > 0) {
-    console.log(pc.blue("  Updated:"));
+    console.log(pc.blue("Updated:"));
     for (const file of updated) {
-      console.log(pc.blue(`    ↻ ${file}`));
+      console.log(pc.blue(`  ~ ${file}`));
     }
   }
 
   if (skipped.length > 0 && args.verbose) {
-    console.log(pc.gray("  Preserved:"));
+    console.log(pc.gray("Preserved:"));
     for (const file of skipped) {
-      console.log(pc.gray(`    - ${file}`));
+      console.log(pc.gray(`  - ${file}`));
     }
   }
 
@@ -453,7 +452,7 @@ async function main(): Promise<void> {
 
   // Step 7: Show summary
   const totalFiles = created.length + updated.length;
-  console.log(pc.green(`✅ Configuration complete! (${totalFiles} files)`));
+  console.log(pc.green(`Done! (${totalFiles} files)`));
   console.log();
 
   // Show what was generated
@@ -465,16 +464,16 @@ async function main(): Promise<void> {
 
   if (skills.length > 0) {
     console.log(
-      `  📚 ${skills.length} skills (${skills.map((s) => path.basename(s.path, ".md")).join(", ")})`
+      `  ${skills.length} skills (${skills.map((s) => path.basename(s.path, ".md")).join(", ")})`
     );
   }
   if (agents.length > 0) {
     console.log(
-      `  🤖 ${agents.length} agents (${agents.map((a) => path.basename(a.path, ".md")).join(", ")})`
+      `  ${agents.length} agents (${agents.map((a) => path.basename(a.path, ".md")).join(", ")})`
     );
   }
   if (rules.length > 0) {
-    console.log(`  📏 ${rules.length} rules`);
+    console.log(`  ${rules.length} rules`);
   }
 
   console.log();
@@ -483,9 +482,9 @@ async function main(): Promise<void> {
 
   // Tips based on project state
   if (!projectInfo.isExisting) {
-    console.log(pc.gray("💡 Tip: Use /task to define your first task"));
+    console.log(pc.gray("Tip: Use /task to define your first task"));
   } else {
-    console.log(pc.gray("💡 Tip: Use /analyze to explore specific areas of your codebase"));
+    console.log(pc.gray("Tip: Use /analyze to explore specific areas of your codebase"));
   }
 }
 
