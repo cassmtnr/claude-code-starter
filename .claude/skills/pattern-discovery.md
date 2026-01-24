@@ -1,7 +1,18 @@
 ---
 name: pattern-discovery
 description: Analyze existing codebase to discover and document patterns
-globs: ["src/**/*", "lib/**/*", "app/**/*", "components/**/*", "pages/**/*", "api/**/*", "services/**/*", "utils/**/*", "helpers/**/*"]
+globs:
+  [
+    'src/**/*',
+    'lib/**/*',
+    'app/**/*',
+    'components/**/*',
+    'pages/**/*',
+    'api/**/*',
+    'services/**/*',
+    'utils/**/*',
+    'helpers/**/*',
+  ]
 ---
 
 # Pattern Discovery
@@ -11,6 +22,7 @@ When starting work on a project, analyze the existing code to understand its pat
 ## Discovery Process
 
 ### 1. Check for Existing Documentation
+
 ```
 Look for:
 - README.md, CONTRIBUTING.md
@@ -20,6 +32,7 @@ Look for:
 ```
 
 ### 2. Analyze Project Structure
+
 ```
 Questions to answer:
 - How are files organized? (by feature, by type, flat?)
@@ -29,6 +42,7 @@ Questions to answer:
 ```
 
 ### 3. Detect Code Patterns
+
 ```
 Look at 3-5 similar files to find:
 - Naming conventions (camelCase, snake_case, PascalCase)
@@ -40,6 +54,7 @@ Look at 3-5 similar files to find:
 ```
 
 ### 4. Identify Architecture
+
 ```
 Common patterns to detect:
 - MVC / MVVM / Clean Architecture
@@ -48,6 +63,16 @@ Common patterns to detect:
 - Dependency injection
 - Event-driven
 - Functional vs OOP
+```
+
+### 5. Review, Test and Documentation
+
+````
+- The Code should have 80% of test coverage
+- Review the whole codebase for consistency
+- Run existing tests to ensure they pass
+- Check for linting/style issues
+- Document how to use and update the github page
 ```
 
 ## When No Code Exists
@@ -65,3 +90,4 @@ If starting a new project:
 - **When in doubt, check similar files** in the codebase
 - **Document as you discover** - note patterns in task state
 - **Ask if unclear** - better to ask than assume
+````

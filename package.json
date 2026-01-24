@@ -23,8 +23,7 @@
     "claude-code-starter": "./dist/cli.js"
   },
   "files": [
-    "dist",
-    "templates"
+    "dist"
   ],
   "scripts": {
     "build": "bun run tsup",
@@ -32,6 +31,11 @@
     "start": "bun dist/cli.js",
     "test": "bun test",
     "typecheck": "bun run tsc --noEmit",
+    "lint": "biome lint src/",
+    "lint:fix": "biome lint --write src/",
+    "format": "biome format --write src/",
+    "check": "biome check src/",
+    "check:fix": "biome check --write src/",
     "prepublishOnly": "bun run build && bun run test"
   },
   "dependencies": {
@@ -39,6 +43,7 @@
     "prompts": "^2.4.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.12",
     "@types/bun": "latest",
     "@types/prompts": "^2.4.9",
     "tsup": "^8.3.5",

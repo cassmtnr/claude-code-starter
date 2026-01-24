@@ -362,6 +362,63 @@ footer p {
   font-size: 0.8125rem;
 }
 
+/* Section descriptions */
+.section-desc {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.section-desc strong {
+  color: var(--text-primary);
+}
+
+/* Tech Detection */
+.tech-detection {
+  padding: 2rem 0;
+}
+
+.tech-detection h2 {
+  font-size: 1.25rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+/* Example Output */
+.example-output {
+  padding: 2rem 0;
+}
+
+.example-output h2 {
+  font-size: 1.25rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+
+.code-example {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.code-example pre {
+  padding: 1rem;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.code-example code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.code-example.terminal {
+  background: var(--bg-primary);
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   header {
@@ -379,5 +436,13 @@ footer p {
 
   .features {
     grid-template-columns: 1fr;
+  }
+
+  .code-example pre {
+    padding: 0.75rem;
+  }
+
+  .code-example code {
+    font-size: 0.75rem;
   }
 }

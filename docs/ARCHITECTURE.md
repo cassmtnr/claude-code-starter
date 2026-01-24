@@ -2,16 +2,29 @@
 
 ## Overview
 
-Claude Code Starter is a CLI tool that scaffolds a `.claude/` directory structure for AI-assisted development with Claude Code.
+Claude Code Starter is an intelligent CLI tool that analyzes repositories and generates tailored Claude Code configurations. It detects your tech stack and creates customized skills, agents, rules, and commands.
 
 ```
 your-project/
 └── .claude/
-    ├── CLAUDE.md          # Instructions for Claude
+    ├── CLAUDE.md          # Project-specific instructions
     ├── settings.json      # Claude Code permissions
-    ├── .version           # Installed framework version
+    ├── agents/            # Specialized AI personas
+    │   ├── code-reviewer.md
+    │   └── test-writer.md
     ├── commands/          # Slash commands (/task, /status, etc.)
+    │   ├── task.md
+    │   ├── status.md
+    │   ├── done.md
+    │   └── analyze.md
+    ├── rules/             # Code style rules
+    │   ├── typescript.md  # (or python.md, etc.)
+    │   └── code-style.md
     ├── skills/            # Methodology guides
+    │   ├── pattern-discovery.md
+    │   ├── systematic-debugging.md
+    │   ├── testing-methodology.md
+    │   └── nextjs-patterns.md  # (framework-specific)
     └── state/
         └── task.md        # Current task tracking
 ```
@@ -21,7 +34,7 @@ your-project/
 | Component | Technology |
 |-----------|------------|
 | Runtime | Bun (local dev) / Node.js 18+ (distribution) |
-| Language | TypeScript |
+| Language | TypeScript (strict mode) |
 | Build | tsup (ESM output) |
 | Testing | bun:test |
 | Package Manager | Bun |
@@ -31,49 +44,172 @@ your-project/
 ```
 claude-code-starter/
 ├── src/
+│   ├── types.ts         # Type definitions
+│   ├── analyzer.ts      # Repository analysis & tech stack detection
+│   ├── generator.ts     # Artifact generation (skills, agents, rules)
 │   ├── cli.ts           # Main CLI entry point
-│   └── cli.test.ts      # Unit tests
-├── templates/           # Files copied to user projects
-│   ├── CLAUDE.md        # → copied to .claude/CLAUDE.md
-│   ├── settings.json
-│   ├── commands/
-│   ├── skills/
-│   └── state/
+│   └── cli.test.ts      # Unit tests (55 tests)
 ├── docs/                # GitHub Pages & documentation
 │   ├── index.html       # Landing page
-│   ├── assets/
-│   └── *.md             # Technical docs
+│   ├── ARCHITECTURE.md  # This file
+│   └── CODE-REVIEW.md   # Code review report
 ├── dist/                # Built output (gitignored)
 └── package.json
 ```
 
-## Core Functions
+## Module Overview
 
-### `src/cli.ts`
+### `src/types.ts`
+
+Core type definitions used across all modules:
+
+| Type | Purpose |
+|------|---------|
+| `Args` | CLI argument flags |
+| `TechStack` | Detected languages, frameworks, tools |
+| `ProjectInfo` | Full repository analysis result |
+| `GeneratedArtifact` | Single generated file (skill, agent, rule, command) |
+| `GenerationResult` | Complete generation output |
+
+### `src/analyzer.ts`
+
+Repository analysis and tech stack detection:
 
 | Function | Purpose |
 |----------|---------|
-| `parseArgs(args)` | Parse CLI flags (-h, -v, -f) |
-| `detectProject(dir)` | Count source files, respecting .gitignore |
-| `copyFile(src, dest, force)` | Copy with skip/overwrite logic |
-| `copyDir(src, dest)` | Recursive directory copy |
+| `analyzeRepository(dir)` | Main entry: returns `ProjectInfo` |
+| `detectTechStack(dir)` | Detect all technologies |
+| `summarizeTechStack(stack)` | Human-readable summary string |
+
+**Internal detection functions:**
+- `detectLanguages()` - Programming languages (.ts, .py, .go, etc.)
+- `detectFrameworks()` - Web frameworks (Next.js, FastAPI, etc.)
+- `detectPackageManager()` - npm, yarn, pnpm, bun, pip, cargo
+- `detectTestingFramework()` - Jest, Vitest, Pytest, etc.
+- `detectLinter()` - ESLint, Biome, Ruff, etc.
+- `detectFormatter()` - Prettier, Black, etc.
+- `detectBundler()` - Webpack, Vite, tsup, etc.
+- `detectCICD()` - GitHub Actions, GitLab CI, etc.
+
+### `src/generator.ts`
+
+Dynamic artifact generation based on detected tech stack:
+
+| Function | Purpose |
+|----------|---------|
+| `generateArtifacts(projectInfo)` | Generate all artifacts |
+| `writeArtifacts(artifacts, dir, force)` | Write to filesystem |
+
+**Generator functions:**
+- `generateClaudeMd()` - Project-specific CLAUDE.md
+- `generateSettings()` - Permissions configuration
+- `generateSkills()` - Methodology guides + framework patterns
+- `generateAgents()` - Code reviewer, test writer
+- `generateRules()` - Language conventions
+- `generateCommands()` - /task, /status, /done, /analyze
+
+### `src/cli.ts`
+
+Main entry point with CLI orchestration:
+
+| Function | Purpose |
+|----------|---------|
+| `parseArgs(args)` | Parse CLI flags |
 | `getVersion()` | Return package version |
-| `getTemplatesDir()` | Return templates path |
+| `main()` | CLI flow: analyze → prompt → generate → write |
 
-### File Detection
+## Data Flow
 
-The `detectProject` function:
-1. Reads `.gitignore` patterns (if exists)
-2. Always ignores `.git` directory
-3. Counts files with common source extensions
-4. Limits depth to 3 levels for performance
+```mermaid
+flowchart TB
+    subgraph CLI["cli.ts"]
+        A[Parse Args] --> B[Show Banner]
+        B --> C[Analyze]
+        C --> D{New Project?}
+        D -->|Yes| E[Prompt User]
+        D -->|No| F[Generate]
+        E --> F
+        F --> G[Write Files]
+        G --> H[Show Summary]
+    end
 
-```typescript
-const extensions = [
-  ".js", ".ts", ".tsx", ".py", ".go", ".rs",
-  ".java", ".rb", ".c", ".cpp", ".cs", ".swift", ".kt"
-];
+    subgraph Analyzer["analyzer.ts"]
+        C --> I[detectTechStack]
+        I --> J[detectLanguages]
+        I --> K[detectFrameworks]
+        I --> L[detectPackageManager]
+        I --> M[detectTestingFramework]
+        I --> N[detectLinter]
+        I --> O[detectCICD]
+    end
+
+    subgraph Generator["generator.ts"]
+        F --> P[generateClaudeMd]
+        F --> Q[generateSettings]
+        F --> R[generateSkills]
+        F --> S[generateAgents]
+        F --> T[generateRules]
+        F --> U[generateCommands]
+    end
+
+    subgraph Output[".claude/"]
+        G --> V[CLAUDE.md]
+        G --> W[settings.json]
+        G --> X[skills/]
+        G --> Y[agents/]
+        G --> Z[rules/]
+        G --> AA[commands/]
+    end
 ```
+
+### Simplified View
+
+```
+┌─────────────┐     ┌──────────────┐     ┌───────────────┐
+│   CLI       │ ──► │   Analyzer   │ ──► │   Generator   │
+│ (cli.ts)    │     │(analyzer.ts) │     │(generator.ts) │
+└─────────────┘     └──────────────┘     └───────────────┘
+      │                    │                     │
+      │              ProjectInfo            Artifacts[]
+      │                    │                     │
+      ▼                    ▼                     ▼
+┌─────────────────────────────────────────────────────────┐
+│                    User's Project                       │
+│                    .claude/ directory                   │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Tech Stack Detection
+
+The analyzer detects technologies by examining:
+
+| Detection | Method |
+|-----------|--------|
+| Languages | File extensions (.ts, .py, .go) + config files |
+| Frameworks | Dependencies in package.json, pyproject.toml, etc. |
+| Package Manager | Lock files (bun.lockb, yarn.lock, etc.) |
+| Testing | Test config files + dependencies |
+| Linting | Config files (.eslintrc, biome.json, ruff.toml) |
+| CI/CD | Workflow files (.github/workflows/, .gitlab-ci.yml) |
+
+## Generated Artifacts
+
+Artifacts are generated based on the detected tech stack:
+
+| Artifact | Always Generated | Conditional |
+|----------|-----------------|-------------|
+| CLAUDE.md | ✓ | - |
+| settings.json | ✓ | - |
+| pattern-discovery.md | ✓ | - |
+| systematic-debugging.md | ✓ | - |
+| testing-methodology.md | ✓ | - |
+| code-reviewer.md | ✓ | - |
+| test-writer.md | ✓ | - |
+| typescript.md | - | TypeScript detected |
+| python.md | - | Python detected |
+| nextjs-patterns.md | - | Next.js detected |
+| fastapi-patterns.md | - | FastAPI detected |
+| nestjs-patterns.md | - | NestJS detected |
 
 ## Build & Test
 
@@ -85,7 +221,7 @@ bun run dev          # Watch mode
 bun run build        # Compile to dist/
 
 # Test
-bun test             # Run all tests
+bun test             # Run all 55 tests
 
 # Type check
 bun run typecheck    # TypeScript validation
@@ -108,16 +244,28 @@ Deploys `docs/` folder to GitHub Pages on push to main.
 
 ## Design Decisions
 
+### Why Dynamic Generation?
+
+Instead of copying static templates, the CLI generates content based on detected technologies:
+- **Tailored output**: Only relevant skills/rules are created
+- **No bloat**: Projects only get what they need
+- **Better context**: CLAUDE.md references actual project details
+
 ### Why Bun?
+
 - Faster local development
 - Built-in test runner (no vitest needed)
 - Native TypeScript support
 
-### Why Node.js compatibility?
+### Why Node.js Compatibility?
+
 - Broader user base can run via `npx`
 - npm registry is the standard distribution channel
 
-### Why no framework detection?
-- Let Claude analyze the project directly
-- Simpler, more maintainable code
-- Works for any language/framework without hardcoding
+### Why Large generator.ts?
+
+The generator file (1896 lines) contains all artifact templates. This is intentional:
+- All templates are related (skills, agents, rules, commands)
+- Easy to search and find templates
+- Splitting would scatter related content
+- No code duplication that warrants abstraction
