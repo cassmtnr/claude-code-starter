@@ -14,3 +14,11 @@ bun.lock
 
 # Test coverage
 coverage/
+
+# AI Agent tooling
+.agent/
+.ralph/
+ralph.yml
+.claude/.version
+.claude/settings.local.json
+.claude/state/

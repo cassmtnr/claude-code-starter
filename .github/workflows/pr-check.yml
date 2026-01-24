@@ -1,0 +1,214 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run Biome lint
+        run: bun run lint
+
+      - name: Check formatting
+        run: bun run biome format --check src/
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run TypeScript type check
+        run: bun run typecheck
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun test
+
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests with coverage
+        run: bun test --coverage
+
+      - name: Check coverage threshold
+        run: |
+          # Run coverage and capture output
+          COVERAGE_OUTPUT=$(bun test --coverage 2>&1) || true
+
+          # Extract line coverage percentage from "All files" row
+          # Format: "All files | XX.XX | YY.YY |"
+          LINE_COV=$(echo "$COVERAGE_OUTPUT" | grep "All files" | awk -F'|' '{print $3}' | tr -d ' ' | head -1)
+
+          if [ -n "$LINE_COV" ]; then
+            echo "Line coverage: ${LINE_COV}%"
+
+            # Compare with threshold (50% - reasonable for CLI tools)
+            THRESHOLD=50
+            RESULT=$(echo "$LINE_COV < $THRESHOLD" | bc -l 2>/dev/null || echo "0")
+            if [ "$RESULT" -eq 1 ]; then
+              echo "::error::Code coverage (${LINE_COV}%) is below threshold (${THRESHOLD}%)"
+              exit 1
+            else
+              echo "✓ Coverage ${LINE_COV}% meets threshold ${THRESHOLD}%"
+            fi
+          else
+            echo "::notice::Could not parse coverage percentage - check output format"
+          fi
+
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for console.log (except warn/error)
+        run: |
+          # Find console.log statements (excluding console.warn, console.error, console.info)
+          # Exclude test files and node_modules
+          if grep -rn "console\.log" --include="*.ts" --include="*.js" --exclude-dir=node_modules --exclude="*.test.ts" --exclude="*.spec.ts" src/ 2>/dev/null; then
+            echo "::warning::Found console.log statements in source code. Consider removing or using console.warn/error instead."
+          fi
+
+      - name: Check for 'any' type usage
+        run: |
+          # Check for explicit 'any' type annotations
+          if grep -rn ": any" --include="*.ts" --exclude-dir=node_modules src/ 2>/dev/null; then
+            echo "::warning::Found explicit 'any' type annotations. Consider using specific types."
+          fi
+
+      - name: Check for skipped tests
+        run: |
+          # Check for .skip, .only, or xit/xdescribe
+          if grep -rn "\.skip\|\.only\|xit(\|xdescribe(" --include="*.test.ts" --include="*.spec.ts" --exclude-dir=node_modules src/ 2>/dev/null; then
+            echo "::error::Found skipped or focused tests. Please remove .skip/.only before merging."
+            exit 1
+          fi
+
+      - name: Check for TODO/FIXME comments
+        run: |
+          # Warn about TODO/FIXME but don't fail
+          if grep -rn "TODO\|FIXME" --include="*.ts" --include="*.js" --exclude-dir=node_modules src/ 2>/dev/null; then
+            echo "::warning::Found TODO/FIXME comments in source code."
+          fi
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build package
+        run: bun run build
+
+      - name: Verify build output
+        run: |
+          if [ ! -f dist/cli.js ]; then
+            echo "::error::Build output dist/cli.js not found"
+            exit 1
+          fi
+          echo "Build successful - dist/cli.js exists"
+
+      - name: Check package size
+        run: |
+          # Calculate total size of dist folder
+          DIST_SIZE=$(du -sb dist/ | cut -f1)
+          DIST_SIZE_KB=$((DIST_SIZE / 1024))
+          echo "Package size: ${DIST_SIZE_KB}KB"
+
+          # Warn if over 500KB (configurable threshold)
+          if [ $DIST_SIZE -gt 512000 ]; then
+            echo "::warning::Package size (${DIST_SIZE_KB}KB) exceeds 500KB threshold"
+          fi
+
+  # Summary job that depends on all checks passing
+  pr-check-complete:
+    name: PR Checks Complete
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, coverage, code-quality, build]
+    steps:
+      - name: All checks passed
+        run: echo "All PR checks passed successfully!"
