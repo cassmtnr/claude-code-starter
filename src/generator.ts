@@ -3588,6 +3588,7 @@ function formatLanguage(lang: Language): string {
 
 function formatFramework(fw: Framework): string {
   const names: Record<Framework, string> = {
+    // JavaScript/TypeScript Frontend
     nextjs: "Next.js",
     react: "React",
     vue: "Vue.js",
@@ -3599,30 +3600,50 @@ function formatFramework(fw: Framework): string {
     remix: "Remix",
     gatsby: "Gatsby",
     solid: "Solid.js",
+    // JavaScript/TypeScript Backend
     express: "Express",
     nestjs: "NestJS",
     fastify: "Fastify",
     hono: "Hono",
     elysia: "Elysia",
     koa: "Koa",
+    // Python
     fastapi: "FastAPI",
     django: "Django",
     flask: "Flask",
     starlette: "Starlette",
+    // Go
     gin: "Gin",
     echo: "Echo",
     fiber: "Fiber",
+    // Rust
     actix: "Actix",
     axum: "Axum",
     rocket: "Rocket",
+    // Ruby
     rails: "Rails",
     sinatra: "Sinatra",
+    // Java/Kotlin
     spring: "Spring",
     quarkus: "Quarkus",
+    // Android
+    "jetpack-compose": "Jetpack Compose",
+    "android-views": "Android Views",
+    room: "Room",
+    hilt: "Hilt",
+    "ktor-android": "Ktor",
+    // Swift/iOS
+    swiftui: "SwiftUI",
+    uikit: "UIKit",
+    vapor: "Vapor",
+    swiftdata: "SwiftData",
+    combine: "Combine",
+    // CSS/UI
     tailwind: "Tailwind CSS",
     shadcn: "shadcn/ui",
     chakra: "Chakra UI",
     mui: "Material UI",
+    // Database/ORM
     prisma: "Prisma",
     drizzle: "Drizzle",
     typeorm: "TypeORM",
