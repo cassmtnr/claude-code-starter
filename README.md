@@ -1,5 +1,12 @@
 # Claude Code Starter
 
+[![CI](https://github.com/cassmtnr/claude-code-starter/actions/workflows/pr-check.yml/badge.svg)](https://github.com/cassmtnr/claude-code-starter/actions/workflows/pr-check.yml)
+[![codecov](https://codecov.io/gh/cassmtnr/claude-code-starter/graph/badge.svg)](https://codecov.io/gh/cassmtnr/claude-code-starter)
+[![npm version](https://img.shields.io/npm/v/claude-code-starter.svg)](https://www.npmjs.com/package/claude-code-starter)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
+[![Bun](https://img.shields.io/badge/Bun-compatible-f472b6.svg)](https://bun.sh/)
+
 Intelligent CLI that bootstraps Claude Code configurations tailored to your project's tech stack.
 
 ## Quick Start
@@ -39,12 +46,13 @@ Based on your stack, creates:
 
 ## Commands
 
-| Command           | Description         |
-| ----------------- | ------------------- |
-| `/task <desc>`    | Start a new task    |
-| `/status`         | Show current task   |
-| `/done`           | Mark task complete  |
-| `/analyze <area>` | Deep dive into code |
+| Command           | Description                              |
+| ----------------- | ---------------------------------------- |
+| `/task <desc>`    | Start a new task                         |
+| `/status`         | Show current task                        |
+| `/done`           | Mark task complete                       |
+| `/analyze <area>` | Deep dive into code                      |
+| `/code-review`    | Review changes for quality and security  |
 
 ## CLI Options
 
@@ -75,7 +83,7 @@ npx claude-code-starter --help    # Show help
 ✅ Configuration complete! (14 files)
 
 Generated for your stack:
-  📚 4 skills (pattern-discovery, testing-methodology, nextjs-patterns, ...)
+  📚 9 skills (pattern-discovery, iterative-development, security, nextjs-patterns, ...)
   🤖 2 agents (code-reviewer, test-writer)
   📏 2 rules
 ```
@@ -95,15 +103,21 @@ After running, your project will have:
 │   ├── task.md
 │   ├── status.md
 │   ├── done.md
-│   └── analyze.md
+│   ├── analyze.md
+│   └── code-review.md
 ├── rules/              # Code style rules
 │   ├── typescript.md   # (or python.md, etc.)
 │   └── code-style.md
-├── skills/             # Framework-specific patterns
+├── skills/             # Methodology guides + patterns
 │   ├── pattern-discovery.md
 │   ├── systematic-debugging.md
 │   ├── testing-methodology.md
-│   └── nextjs-patterns.md  # (or fastapi-patterns.md, etc.)
+│   ├── iterative-development.md
+│   ├── commit-hygiene.md
+│   ├── code-deduplication.md
+│   ├── simplicity-rules.md
+│   ├── security.md
+│   └── nextjs-patterns.md  # (framework-specific)
 └── state/
     └── task.md         # Current task tracking
 ```

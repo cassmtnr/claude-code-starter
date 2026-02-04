@@ -370,6 +370,16 @@ describe("generateArtifacts", () => {
     expect(claudeMd?.content).toContain("# ");
   });
 
+  it("generates CLAUDE.md with quality gates", () => {
+    const info = analyzeRepository(tempDir);
+    const result = generateArtifacts(info);
+    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
+    expect(claudeMd?.content).toContain("## Quality Gates");
+    expect(claudeMd?.content).toContain("Lines per function");
+    expect(claudeMd?.content).toContain("20 max");
+    expect(claudeMd?.content).toContain("/code-review");
+  });
+
   it("generates settings.json artifact", () => {
     const info = analyzeRepository(tempDir);
     const result = generateArtifacts(info);
@@ -383,10 +393,18 @@ describe("generateArtifacts", () => {
     const info = analyzeRepository(tempDir);
     const result = generateArtifacts(info);
     const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.length).toBeGreaterThanOrEqual(3);
+    // 8 core skills: 3 methodology + 5 process discipline
+    expect(skills.length).toBeGreaterThanOrEqual(8);
+    // Methodology skills
     expect(skills.map((s) => s.path)).toContain(".claude/skills/pattern-discovery.md");
     expect(skills.map((s) => s.path)).toContain(".claude/skills/systematic-debugging.md");
     expect(skills.map((s) => s.path)).toContain(".claude/skills/testing-methodology.md");
+    // Process discipline skills
+    expect(skills.map((s) => s.path)).toContain(".claude/skills/iterative-development.md");
+    expect(skills.map((s) => s.path)).toContain(".claude/skills/commit-hygiene.md");
+    expect(skills.map((s) => s.path)).toContain(".claude/skills/code-deduplication.md");
+    expect(skills.map((s) => s.path)).toContain(".claude/skills/simplicity-rules.md");
+    expect(skills.map((s) => s.path)).toContain(".claude/skills/security.md");
   });
 
   it("generates agents", () => {
@@ -402,11 +420,12 @@ describe("generateArtifacts", () => {
     const info = analyzeRepository(tempDir);
     const result = generateArtifacts(info);
     const commands = result.artifacts.filter((a) => a.type === "command");
-    expect(commands.length).toBe(4);
+    expect(commands.length).toBe(5);
     expect(commands.map((c) => c.path)).toContain(".claude/commands/task.md");
     expect(commands.map((c) => c.path)).toContain(".claude/commands/status.md");
     expect(commands.map((c) => c.path)).toContain(".claude/commands/done.md");
     expect(commands.map((c) => c.path)).toContain(".claude/commands/analyze.md");
+    expect(commands.map((c) => c.path)).toContain(".claude/commands/code-review.md");
   });
 
   it("generates Next.js skill for Next.js projects", () => {

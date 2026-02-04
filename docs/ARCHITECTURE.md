@@ -16,7 +16,8 @@ your-project/
     │   ├── task.md
     │   ├── status.md
     │   ├── done.md
-    │   └── analyze.md
+    │   ├── analyze.md
+    │   └── code-review.md
     ├── rules/             # Code style rules
     │   ├── typescript.md  # (or python.md, etc.)
     │   └── code-style.md
@@ -24,6 +25,11 @@ your-project/
     │   ├── pattern-discovery.md
     │   ├── systematic-debugging.md
     │   ├── testing-methodology.md
+    │   ├── iterative-development.md
+    │   ├── commit-hygiene.md
+    │   ├── code-deduplication.md
+    │   ├── simplicity-rules.md
+    │   ├── security.md
     │   └── nextjs-patterns.md  # (framework-specific)
     └── state/
         └── task.md        # Current task tracking
@@ -48,11 +54,11 @@ claude-code-starter/
 │   ├── analyzer.ts      # Repository analysis & tech stack detection
 │   ├── generator.ts     # Artifact generation (skills, agents, rules)
 │   ├── cli.ts           # Main CLI entry point
-│   └── cli.test.ts      # Unit tests (55 tests)
+│   └── cli.test.ts      # Unit tests (56 tests)
 ├── docs/                # GitHub Pages & documentation
 │   ├── index.html       # Landing page
 │   ├── ARCHITECTURE.md  # This file
-│   └── CODE-REVIEW.md   # Code review report
+│   └── CHANGELOG.md     # Version history
 ├── dist/                # Built output (gitignored)
 └── package.json
 ```
@@ -203,8 +209,14 @@ Artifacts are generated based on the detected tech stack:
 | pattern-discovery.md | ✓ | - |
 | systematic-debugging.md | ✓ | - |
 | testing-methodology.md | ✓ | - |
+| iterative-development.md | ✓ | - |
+| commit-hygiene.md | ✓ | - |
+| code-deduplication.md | ✓ | - |
+| simplicity-rules.md | ✓ | - |
+| security.md | ✓ | - |
 | code-reviewer.md | ✓ | - |
 | test-writer.md | ✓ | - |
+| code-review.md (command) | ✓ | - |
 | typescript.md | - | TypeScript detected |
 | python.md | - | Python detected |
 | nextjs-patterns.md | - | Next.js detected |
@@ -221,7 +233,7 @@ bun run dev          # Watch mode
 bun run build        # Compile to dist/
 
 # Test
-bun test             # Run all 55 tests
+bun test             # Run all 56 tests
 
 # Type check
 bun run typecheck    # TypeScript validation
@@ -264,7 +276,7 @@ Instead of copying static templates, the CLI generates content based on detected
 
 ### Why Large generator.ts?
 
-The generator file (1896 lines) contains all artifact templates. This is intentional:
+The generator file (~2600 lines) contains all artifact templates. This is intentional:
 - All templates are related (skills, agents, rules, commands)
 - Easy to search and find templates
 - Splitting would scatter related content
