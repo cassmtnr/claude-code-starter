@@ -116,6 +116,18 @@ export type Framework =
   // Java/Kotlin
   | "spring"
   | "quarkus"
+  // Android
+  | "jetpack-compose"
+  | "android-views"
+  | "room"
+  | "hilt"
+  | "ktor-android"
+  // Swift/iOS
+  | "swiftui"
+  | "uikit"
+  | "vapor"
+  | "swiftdata"
+  | "combine"
   // CSS/UI
   | "tailwind"
   | "shadcn"

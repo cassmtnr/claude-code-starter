@@ -63,7 +63,7 @@ export function getVersion(): string {
 // Internal Functions
 // ============================================================================
 
-function showHelp(): void {
+export function showHelp(): void {
   console.log(`
 ${pc.cyan("Claude Code Starter")} v${VERSION}
 
@@ -93,14 +93,14 @@ ${pc.bold("MORE INFO")}
 `);
 }
 
-function showBanner(): void {
+export function showBanner(): void {
   console.log();
   console.log(pc.bold("Claude Code Starter") + pc.gray(` v${VERSION}`));
   console.log(pc.gray("Intelligent AI-Assisted Development Setup"));
   console.log();
 }
 
-function showTechStack(projectInfo: ProjectInfo, verbose: boolean): void {
+export function showTechStack(projectInfo: ProjectInfo, verbose: boolean): void {
   const { techStack } = projectInfo;
 
   console.log(pc.bold("Tech Stack"));
@@ -146,7 +146,7 @@ function showTechStack(projectInfo: ProjectInfo, verbose: boolean): void {
   console.log();
 }
 
-async function promptNewProject(args: Args): Promise<NewProjectPreferences | null> {
+export async function promptNewProject(args: Args): Promise<NewProjectPreferences | null> {
   if (!args.interactive) {
     return null;
   }
@@ -215,7 +215,10 @@ async function promptNewProject(args: Args): Promise<NewProjectPreferences | nul
   };
 }
 
-function createTaskFile(projectInfo: ProjectInfo, preferences: NewProjectPreferences | null): void {
+export function createTaskFile(
+  projectInfo: ProjectInfo,
+  preferences: NewProjectPreferences | null
+): void {
   const taskPath = path.join(projectInfo.rootDir, ".claude", "state", "task.md");
 
   // Create state directory
@@ -278,7 +281,7 @@ ${preferences?.primaryLanguage ? `**Language:** ${formatLanguage(preferences.pri
   fs.writeFileSync(taskPath, content);
 }
 
-function formatLanguage(lang: Language): string {
+export function formatLanguage(lang: Language): string {
   const names: Record<Language, string> = {
     typescript: "TypeScript",
     javascript: "JavaScript",
@@ -296,7 +299,7 @@ function formatLanguage(lang: Language): string {
   return names[lang] || lang;
 }
 
-function formatFramework(fw: Framework): string {
+export function formatFramework(fw: Framework): string {
   const names: Record<string, string> = {
     nextjs: "Next.js",
     react: "React",

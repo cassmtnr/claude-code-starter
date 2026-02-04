@@ -488,6 +488,28 @@ function getSkillsForStack(stack: TechStack): SkillDef[] {
     skills.push({ name: "database-patterns", description: "Database and ORM patterns" });
   }
 
+  // Swift/iOS frameworks
+  if (stack.frameworks.includes("swiftui")) {
+    skills.push({ name: "swiftui-patterns", description: "SwiftUI declarative UI patterns" });
+  }
+
+  if (stack.frameworks.includes("uikit")) {
+    skills.push({ name: "uikit-patterns", description: "UIKit view controller patterns" });
+  }
+
+  if (stack.frameworks.includes("vapor")) {
+    skills.push({ name: "vapor-patterns", description: "Vapor server-side Swift patterns" });
+  }
+
+  // Android/Kotlin frameworks
+  if (stack.frameworks.includes("jetpack-compose")) {
+    skills.push({ name: "compose-patterns", description: "Jetpack Compose UI patterns" });
+  }
+
+  if (stack.frameworks.includes("android-views")) {
+    skills.push({ name: "android-views-patterns", description: "Android XML views patterns" });
+  }
+
   return skills;
 }
 
@@ -521,6 +543,28 @@ function generateSkills(stack: TechStack): GeneratedArtifact[] {
 
   if (stack.frameworks.includes("nestjs")) {
     artifacts.push(generateNestJSSkill());
+  }
+
+  // Swift/iOS skills
+  if (stack.frameworks.includes("swiftui")) {
+    artifacts.push(generateSwiftUISkill());
+  }
+
+  if (stack.frameworks.includes("uikit")) {
+    artifacts.push(generateUIKitSkill());
+  }
+
+  if (stack.frameworks.includes("vapor")) {
+    artifacts.push(generateVaporSkill());
+  }
+
+  // Android/Kotlin skills
+  if (stack.frameworks.includes("jetpack-compose")) {
+    artifacts.push(generateJetpackComposeSkill());
+  }
+
+  if (stack.frameworks.includes("android-views")) {
+    artifacts.push(generateAndroidViewsSkill());
   }
 
   return artifacts;
@@ -1370,6 +1414,947 @@ describe('UsersService', () => {
   });
 });
 \`\`\`
+`,
+    isNew: true,
+  };
+}
+
+// ============================================================================
+// Swift/iOS Skills
+// ============================================================================
+
+function generateSwiftUISkill(): GeneratedArtifact {
+  return {
+    type: "skill",
+    path: ".claude/skills/swiftui-patterns.md",
+    content: `---
+name: swiftui-patterns
+description: SwiftUI declarative UI patterns and best practices
+globs:
+  - "**/*.swift"
+---
+
+# SwiftUI Patterns
+
+## View Structure
+
+\`\`\`swift
+import SwiftUI
+
+struct ContentView: View {
+    @State private var count = 0
+    @StateObject private var viewModel = ContentViewModel()
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Count: \\(count)")
+                .font(.title)
+
+            Button("Increment") {
+                count += 1
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
+    }
+}
+
+#Preview {
+    ContentView()
+}
+\`\`\`
+
+## Property Wrappers
+
+| Wrapper | Use Case |
+|---------|----------|
+| \`@State\` | Simple value types owned by view |
+| \`@Binding\` | Two-way connection to parent's state |
+| \`@StateObject\` | Reference type owned by view (create once) |
+| \`@ObservedObject\` | Reference type passed from parent |
+| \`@EnvironmentObject\` | Shared data through view hierarchy |
+| \`@Environment\` | System environment values |
+
+## MVVM Pattern
+
+\`\`\`swift
+// ViewModel
+@MainActor
+class UserViewModel: ObservableObject {
+    @Published var users: [User] = []
+    @Published var isLoading = false
+    @Published var error: Error?
+
+    private let service: UserService
+
+    init(service: UserService = .shared) {
+        self.service = service
+    }
+
+    func fetchUsers() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            users = try await service.getUsers()
+        } catch {
+            self.error = error
+        }
+    }
+}
+
+// View
+struct UsersView: View {
+    @StateObject private var viewModel = UserViewModel()
+
+    var body: some View {
+        List(viewModel.users) { user in
+            UserRow(user: user)
+        }
+        .overlay {
+            if viewModel.isLoading {
+                ProgressView()
+            }
+        }
+        .task {
+            await viewModel.fetchUsers()
+        }
+    }
+}
+\`\`\`
+
+## Navigation (iOS 16+)
+
+\`\`\`swift
+struct AppNavigation: View {
+    @State private var path = NavigationPath()
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            HomeView()
+                .navigationDestination(for: User.self) { user in
+                    UserDetailView(user: user)
+                }
+                .navigationDestination(for: Settings.self) { settings in
+                    SettingsView(settings: settings)
+                }
+        }
+    }
+}
+\`\`\`
+
+## Async/Await Patterns
+
+\`\`\`swift
+// Task modifier for view lifecycle
+.task {
+    await loadData()
+}
+
+// Task with cancellation
+.task(id: searchText) {
+    try? await Task.sleep(for: .milliseconds(300))
+    await search(searchText)
+}
+
+// Refreshable
+.refreshable {
+    await viewModel.refresh()
+}
+\`\`\`
+
+## Best Practices
+
+1. **Keep views small** - Extract subviews for reusability
+2. **Use \`@MainActor\`** - For ViewModels updating UI
+3. **Prefer value types** - Structs over classes when possible
+4. **Use \`.task\`** - Instead of \`.onAppear\` for async work
+5. **Preview extensively** - Use #Preview for rapid iteration
+`,
+    isNew: true,
+  };
+}
+
+function generateUIKitSkill(): GeneratedArtifact {
+  return {
+    type: "skill",
+    path: ".claude/skills/uikit-patterns.md",
+    content: `---
+name: uikit-patterns
+description: UIKit view controller patterns and best practices
+globs:
+  - "**/*.swift"
+---
+
+# UIKit Patterns
+
+## View Controller Structure
+
+\`\`\`swift
+import UIKit
+
+class UserViewController: UIViewController {
+    // MARK: - Properties
+    private let viewModel: UserViewModel
+    private var cancellables = Set<AnyCancellable>()
+
+    // MARK: - UI Components
+    private lazy var tableView: UITableView = {
+        let table = UITableView()
+        table.translatesAutoresizingMaskIntoConstraints = false
+        table.delegate = self
+        table.dataSource = self
+        table.register(UserCell.self, forCellReuseIdentifier: UserCell.identifier)
+        return table
+    }()
+
+    // MARK: - Lifecycle
+    init(viewModel: UserViewModel) {
+        self.viewModel = viewModel
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        setupUI()
+        setupBindings()
+        viewModel.fetchUsers()
+    }
+
+    // MARK: - Setup
+    private func setupUI() {
+        view.backgroundColor = .systemBackground
+        view.addSubview(tableView)
+
+        NSLayoutConstraint.activate([
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+    }
+
+    private func setupBindings() {
+        viewModel.$users
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.tableView.reloadData()
+            }
+            .store(in: &cancellables)
+    }
+}
+\`\`\`
+
+## Coordinator Pattern
+
+\`\`\`swift
+protocol Coordinator: AnyObject {
+    var childCoordinators: [Coordinator] { get set }
+    var navigationController: UINavigationController { get set }
+    func start()
+}
+
+class AppCoordinator: Coordinator {
+    var childCoordinators: [Coordinator] = []
+    var navigationController: UINavigationController
+
+    init(navigationController: UINavigationController) {
+        self.navigationController = navigationController
+    }
+
+    func start() {
+        let vc = HomeViewController()
+        vc.coordinator = self
+        navigationController.pushViewController(vc, animated: false)
+    }
+
+    func showUserDetail(_ user: User) {
+        let vc = UserDetailViewController(user: user)
+        navigationController.pushViewController(vc, animated: true)
+    }
+}
+\`\`\`
+
+## Table View Cell
+
+\`\`\`swift
+class UserCell: UITableViewCell {
+    static let identifier = "UserCell"
+
+    private let nameLabel: UILabel = {
+        let label = UILabel()
+        label.font = .preferredFont(forTextStyle: .headline)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        setupUI()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupUI() {
+        contentView.addSubview(nameLabel)
+        NSLayoutConstraint.activate([
+            nameLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            nameLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+        ])
+    }
+
+    func configure(with user: User) {
+        nameLabel.text = user.name
+    }
+}
+\`\`\`
+
+## Best Practices
+
+1. **Use Auto Layout** - Programmatic constraints over Storyboards
+2. **MARK comments** - Organize code sections
+3. **Coordinator pattern** - For navigation logic
+4. **Dependency injection** - Pass dependencies via init
+5. **Combine for bindings** - Reactive updates from ViewModel
+`,
+    isNew: true,
+  };
+}
+
+function generateVaporSkill(): GeneratedArtifact {
+  return {
+    type: "skill",
+    path: ".claude/skills/vapor-patterns.md",
+    content: `---
+name: vapor-patterns
+description: Vapor server-side Swift patterns
+globs:
+  - "**/*.swift"
+  - "Package.swift"
+---
+
+# Vapor Patterns
+
+## Route Structure
+
+\`\`\`swift
+import Vapor
+
+func routes(_ app: Application) throws {
+    // Basic routes
+    app.get { req in
+        "Hello, world!"
+    }
+
+    // Route groups
+    let api = app.grouped("api", "v1")
+
+    // Controller registration
+    try api.register(collection: UserController())
+}
+\`\`\`
+
+## Controller Pattern
+
+\`\`\`swift
+import Vapor
+
+struct UserController: RouteCollection {
+    func boot(routes: RoutesBuilder) throws {
+        let users = routes.grouped("users")
+
+        users.get(use: index)
+        users.post(use: create)
+        users.group(":userID") { user in
+            user.get(use: show)
+            user.put(use: update)
+            user.delete(use: delete)
+        }
+    }
+
+    // GET /users
+    func index(req: Request) async throws -> [UserDTO] {
+        try await User.query(on: req.db).all().map { $0.toDTO() }
+    }
+
+    // POST /users
+    func create(req: Request) async throws -> UserDTO {
+        let input = try req.content.decode(CreateUserInput.self)
+        let user = User(name: input.name, email: input.email)
+        try await user.save(on: req.db)
+        return user.toDTO()
+    }
+
+    // GET /users/:userID
+    func show(req: Request) async throws -> UserDTO {
+        guard let user = try await User.find(req.parameters.get("userID"), on: req.db) else {
+            throw Abort(.notFound)
+        }
+        return user.toDTO()
+    }
+}
+\`\`\`
+
+## Fluent Models
+
+\`\`\`swift
+import Fluent
+import Vapor
+
+final class User: Model, Content {
+    static let schema = "users"
+
+    @ID(key: .id)
+    var id: UUID?
+
+    @Field(key: "name")
+    var name: String
+
+    @Field(key: "email")
+    var email: String
+
+    @Timestamp(key: "created_at", on: .create)
+    var createdAt: Date?
+
+    @Children(for: \\.$user)
+    var posts: [Post]
+
+    init() {}
+
+    init(id: UUID? = nil, name: String, email: String) {
+        self.id = id
+        self.name = name
+        self.email = email
+    }
+}
+
+// Migration
+struct CreateUser: AsyncMigration {
+    func prepare(on database: Database) async throws {
+        try await database.schema("users")
+            .id()
+            .field("name", .string, .required)
+            .field("email", .string, .required)
+            .field("created_at", .datetime)
+            .unique(on: "email")
+            .create()
+    }
+
+    func revert(on database: Database) async throws {
+        try await database.schema("users").delete()
+    }
+}
+\`\`\`
+
+## DTOs and Validation
+
+\`\`\`swift
+struct CreateUserInput: Content, Validatable {
+    var name: String
+    var email: String
+
+    static func validations(_ validations: inout Validations) {
+        validations.add("name", as: String.self, is: !.empty)
+        validations.add("email", as: String.self, is: .email)
+    }
+}
+
+struct UserDTO: Content {
+    var id: UUID?
+    var name: String
+    var email: String
+}
+
+extension User {
+    func toDTO() -> UserDTO {
+        UserDTO(id: id, name: name, email: email)
+    }
+}
+\`\`\`
+
+## Middleware
+
+\`\`\`swift
+struct AuthMiddleware: AsyncMiddleware {
+    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        guard let token = request.headers.bearerAuthorization?.token else {
+            throw Abort(.unauthorized)
+        }
+
+        // Validate token
+        let user = try await validateToken(token, on: request)
+        request.auth.login(user)
+
+        return try await next.respond(to: request)
+    }
+}
+\`\`\`
+
+## Testing
+
+\`\`\`swift
+@testable import App
+import XCTVapor
+
+final class UserTests: XCTestCase {
+    var app: Application!
+
+    override func setUp() async throws {
+        app = Application(.testing)
+        try configure(app)
+        try await app.autoMigrate()
+    }
+
+    override func tearDown() async throws {
+        try await app.autoRevert()
+        app.shutdown()
+    }
+
+    func testCreateUser() async throws {
+        try app.test(.POST, "api/v1/users", beforeRequest: { req in
+            try req.content.encode(CreateUserInput(name: "Test", email: "test@example.com"))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let user = try res.content.decode(UserDTO.self)
+            XCTAssertEqual(user.name, "Test")
+        })
+    }
+}
+\`\`\`
+`,
+    isNew: true,
+  };
+}
+
+// ============================================================================
+// Android/Kotlin Skills
+// ============================================================================
+
+function generateJetpackComposeSkill(): GeneratedArtifact {
+  return {
+    type: "skill",
+    path: ".claude/skills/compose-patterns.md",
+    content: `---
+name: compose-patterns
+description: Jetpack Compose UI patterns and best practices
+globs:
+  - "**/*.kt"
+---
+
+# Jetpack Compose Patterns
+
+## Composable Structure
+
+\`\`\`kotlin
+@Composable
+fun UserScreen(
+    viewModel: UserViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    UserScreenContent(
+        uiState = uiState,
+        onRefresh = viewModel::refresh,
+        onUserClick = viewModel::selectUser
+    )
+}
+
+@Composable
+private fun UserScreenContent(
+    uiState: UserUiState,
+    onRefresh: () -> Unit,
+    onUserClick: (User) -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Users") })
+        }
+    ) { padding ->
+        when (uiState) {
+            is UserUiState.Loading -> LoadingIndicator()
+            is UserUiState.Success -> UserList(
+                users = uiState.users,
+                onUserClick = onUserClick,
+                modifier = Modifier.padding(padding)
+            )
+            is UserUiState.Error -> ErrorMessage(uiState.message)
+        }
+    }
+}
+\`\`\`
+
+## State Management
+
+\`\`\`kotlin
+// UI State
+sealed interface UserUiState {
+    object Loading : UserUiState
+    data class Success(val users: List<User>) : UserUiState
+    data class Error(val message: String) : UserUiState
+}
+
+// ViewModel
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow<UserUiState>(UserUiState.Loading)
+    val uiState: StateFlow<UserUiState> = _uiState.asStateFlow()
+
+    init {
+        loadUsers()
+    }
+
+    fun refresh() {
+        loadUsers()
+    }
+
+    private fun loadUsers() {
+        viewModelScope.launch {
+            _uiState.value = UserUiState.Loading
+            repository.getUsers()
+                .onSuccess { users ->
+                    _uiState.value = UserUiState.Success(users)
+                }
+                .onFailure { error ->
+                    _uiState.value = UserUiState.Error(error.message ?: "Unknown error")
+                }
+        }
+    }
+}
+\`\`\`
+
+## Reusable Components
+
+\`\`\`kotlin
+@Composable
+fun UserCard(
+    user: User,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = user.avatarUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(
+                    text = user.name,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = user.email,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+\`\`\`
+
+## Navigation
+
+\`\`\`kotlin
+@Composable
+fun AppNavigation() {
+    val navController = rememberNavController()
+
+    NavHost(
+        navController = navController,
+        startDestination = "home"
+    ) {
+        composable("home") {
+            HomeScreen(
+                onUserClick = { userId ->
+                    navController.navigate("user/$userId")
+                }
+            )
+        }
+        composable(
+            route = "user/{userId}",
+            arguments = listOf(navArgument("userId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val userId = backStackEntry.arguments?.getString("userId")
+            UserDetailScreen(userId = userId)
+        }
+    }
+}
+\`\`\`
+
+## Theming
+
+\`\`\`kotlin
+@Composable
+fun AppTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit
+) {
+    val colorScheme = if (darkTheme) {
+        darkColorScheme(
+            primary = Purple80,
+            secondary = PurpleGrey80
+        )
+    } else {
+        lightColorScheme(
+            primary = Purple40,
+            secondary = PurpleGrey40
+        )
+    }
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
+}
+\`\`\`
+
+## Best Practices
+
+1. **Stateless composables** - Pass state down, events up
+2. **Remember wisely** - Use \`remember\` for expensive calculations
+3. **Lifecycle-aware collection** - Use \`collectAsStateWithLifecycle()\`
+4. **Modifier parameter** - Always accept Modifier as last parameter
+5. **Preview annotations** - Add @Preview for rapid iteration
+`,
+    isNew: true,
+  };
+}
+
+function generateAndroidViewsSkill(): GeneratedArtifact {
+  return {
+    type: "skill",
+    path: ".claude/skills/android-views-patterns.md",
+    content: `---
+name: android-views-patterns
+description: Android XML views and traditional patterns
+globs:
+  - "**/*.kt"
+  - "**/*.xml"
+---
+
+# Android Views Patterns
+
+## Activity Structure
+
+\`\`\`kotlin
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityMainBinding
+    private val viewModel: MainViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        setupUI()
+        observeViewModel()
+    }
+
+    private fun setupUI() {
+        binding.recyclerView.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = userAdapter
+        }
+
+        binding.swipeRefresh.setOnRefreshListener {
+            viewModel.refresh()
+        }
+    }
+
+    private fun observeViewModel() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    updateUI(state)
+                }
+            }
+        }
+    }
+
+    private fun updateUI(state: MainUiState) {
+        binding.swipeRefresh.isRefreshing = state.isLoading
+        userAdapter.submitList(state.users)
+        binding.errorText.isVisible = state.error != null
+        binding.errorText.text = state.error
+    }
+}
+\`\`\`
+
+## Fragment Pattern
+
+\`\`\`kotlin
+class UserFragment : Fragment(R.layout.fragment_user) {
+
+    private var _binding: FragmentUserBinding? = null
+    private val binding get() = _binding!!
+
+    private val viewModel: UserViewModel by viewModels()
+    private val args: UserFragmentArgs by navArgs()
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        _binding = FragmentUserBinding.bind(view)
+
+        setupUI()
+        observeViewModel()
+        viewModel.loadUser(args.userId)
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+}
+\`\`\`
+
+## RecyclerView Adapter
+
+\`\`\`kotlin
+class UserAdapter(
+    private val onItemClick: (User) -> Unit
+) : ListAdapter<User, UserAdapter.ViewHolder>(UserDiffCallback()) {
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val binding = ItemUserBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
+        return ViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        holder.bind(getItem(position))
+    }
+
+    inner class ViewHolder(
+        private val binding: ItemUserBinding
+    ) : RecyclerView.ViewHolder(binding.root) {
+
+        init {
+            binding.root.setOnClickListener {
+                onItemClick(getItem(adapterPosition))
+            }
+        }
+
+        fun bind(user: User) {
+            binding.nameText.text = user.name
+            binding.emailText.text = user.email
+            Glide.with(binding.avatar)
+                .load(user.avatarUrl)
+                .circleCrop()
+                .into(binding.avatar)
+        }
+    }
+
+    class UserDiffCallback : DiffUtil.ItemCallback<User>() {
+        override fun areItemsTheSame(oldItem: User, newItem: User) =
+            oldItem.id == newItem.id
+
+        override fun areContentsTheSame(oldItem: User, newItem: User) =
+            oldItem == newItem
+    }
+}
+\`\`\`
+
+## XML Layout
+
+\`\`\`xml
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="0dp"
+        android:layout_height="?attr/actionBarSize"
+        app:title="Users"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipeRefresh"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@id/toolbar"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+\`\`\`
+
+## ViewModel with Repository
+
+\`\`\`kotlin
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository,
+    private val savedStateHandle: SavedStateHandle
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(UserUiState())
+    val uiState: StateFlow<UserUiState> = _uiState.asStateFlow()
+
+    fun loadUsers() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val users = repository.getUsers()
+                _uiState.update { it.copy(users = users, isLoading = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message, isLoading = false) }
+            }
+        }
+    }
+}
+
+data class UserUiState(
+    val users: List<User> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null
+)
+\`\`\`
+
+## Best Practices
+
+1. **View Binding** - Use over findViewById or synthetic imports
+2. **Lifecycle awareness** - Collect flows in repeatOnLifecycle
+3. **ListAdapter** - For efficient RecyclerView updates
+4. **Navigation Component** - For fragment navigation
+5. **Clean up bindings** - Set to null in onDestroyView
 `,
     isNew: true,
   };
@@ -2603,6 +3588,7 @@ function formatLanguage(lang: Language): string {
 
 function formatFramework(fw: Framework): string {
   const names: Record<Framework, string> = {
+    // JavaScript/TypeScript Frontend
     nextjs: "Next.js",
     react: "React",
     vue: "Vue.js",
@@ -2614,30 +3600,50 @@ function formatFramework(fw: Framework): string {
     remix: "Remix",
     gatsby: "Gatsby",
     solid: "Solid.js",
+    // JavaScript/TypeScript Backend
     express: "Express",
     nestjs: "NestJS",
     fastify: "Fastify",
     hono: "Hono",
     elysia: "Elysia",
     koa: "Koa",
+    // Python
     fastapi: "FastAPI",
     django: "Django",
     flask: "Flask",
     starlette: "Starlette",
+    // Go
     gin: "Gin",
     echo: "Echo",
     fiber: "Fiber",
+    // Rust
     actix: "Actix",
     axum: "Axum",
     rocket: "Rocket",
+    // Ruby
     rails: "Rails",
     sinatra: "Sinatra",
+    // Java/Kotlin
     spring: "Spring",
     quarkus: "Quarkus",
+    // Android
+    "jetpack-compose": "Jetpack Compose",
+    "android-views": "Android Views",
+    room: "Room",
+    hilt: "Hilt",
+    "ktor-android": "Ktor",
+    // Swift/iOS
+    swiftui: "SwiftUI",
+    uikit: "UIKit",
+    vapor: "Vapor",
+    swiftdata: "SwiftData",
+    combine: "Combine",
+    // CSS/UI
     tailwind: "Tailwind CSS",
     shadcn: "shadcn/ui",
     chakra: "Chakra UI",
     mui: "Material UI",
+    // Database/ORM
     prisma: "Prisma",
     drizzle: "Drizzle",
     typeorm: "TypeORM",

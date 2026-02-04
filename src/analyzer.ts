@@ -288,6 +288,93 @@ function detectFrameworks(
       if (cargo.includes("rocket")) add("rocket");
     }
 
+    // Check Swift/iOS frameworks
+    const packageSwiftPath = path.join(rootDir, "Package.swift");
+    const xcodeprojExists =
+      files.some((f) => f.endsWith(".xcodeproj")) || files.some((f) => f.endsWith(".xcworkspace"));
+
+    if (fs.existsSync(packageSwiftPath)) {
+      const packageSwift = fs.readFileSync(packageSwiftPath, "utf-8").toLowerCase();
+      if (packageSwift.includes("vapor")) add("vapor");
+    }
+
+    // Check for iOS/macOS project indicators
+    if (xcodeprojExists || files.some((f) => f.endsWith(".swift"))) {
+      // Check for SwiftUI vs UIKit by looking at common file patterns
+      const srcFiles = listSourceFilesShallow(rootDir, [".swift"]);
+      const hasSwiftUI = srcFiles.some(
+        (f) => f.includes("ContentView") || f.includes("App.swift") || f.includes("@main struct")
+      );
+      const hasUIKit = srcFiles.some(
+        (f) =>
+          f.includes("ViewController") || f.includes("AppDelegate") || f.includes("SceneDelegate")
+      );
+
+      if (hasSwiftUI) add("swiftui");
+      if (hasUIKit) add("uikit");
+
+      // Check for SwiftData or Combine in any Swift file
+      for (const file of srcFiles.slice(0, 10)) {
+        // Check first 10 files
+        try {
+          const content = fs.readFileSync(file, "utf-8");
+          if (content.includes("import SwiftData") || content.includes("@Model")) add("swiftdata");
+          if (content.includes("import Combine") || content.includes("PassthroughSubject"))
+            add("combine");
+        } catch {
+          // Ignore read errors
+        }
+      }
+    }
+
+    // Check Android/Kotlin frameworks (build.gradle or build.gradle.kts)
+    const gradlePath = path.join(rootDir, "build.gradle");
+    const gradleKtsPath = path.join(rootDir, "build.gradle.kts");
+    const appGradlePath = path.join(rootDir, "app", "build.gradle");
+    const appGradleKtsPath = path.join(rootDir, "app", "build.gradle.kts");
+
+    let gradleContent = "";
+    for (const gPath of [gradlePath, gradleKtsPath, appGradlePath, appGradleKtsPath]) {
+      if (fs.existsSync(gPath)) {
+        gradleContent += fs.readFileSync(gPath, "utf-8").toLowerCase();
+      }
+    }
+
+    if (gradleContent) {
+      // Check for Android project
+      if (gradleContent.includes("com.android") || gradleContent.includes("android {")) {
+        // Jetpack Compose detection
+        if (
+          gradleContent.includes("compose") ||
+          gradleContent.includes("androidx.compose") ||
+          gradleContent.includes("composeoptions")
+        ) {
+          add("jetpack-compose");
+        } else {
+          add("android-views");
+        }
+
+        // Room database
+        if (gradleContent.includes("room") || gradleContent.includes("androidx.room")) {
+          add("room");
+        }
+
+        // Hilt/Dagger dependency injection
+        if (gradleContent.includes("hilt") || gradleContent.includes("dagger.hilt")) {
+          add("hilt");
+        }
+
+        // Ktor for Android
+        if (gradleContent.includes("ktor")) {
+          add("ktor-android");
+        }
+      }
+
+      // Spring/Quarkus for JVM backend
+      if (gradleContent.includes("spring")) add("spring");
+      if (gradleContent.includes("quarkus")) add("quarkus");
+    }
+
     return frameworks;
   }
 
@@ -577,6 +664,34 @@ function hasDevDep(packageJson: Record<string, unknown> | null, dep: string): bo
   const devDeps = (packageJson.devDependencies as Record<string, string>) || {};
   const deps = (packageJson.dependencies as Record<string, string>) || {};
   return dep in devDeps || dep in deps;
+}
+
+/**
+ * List source files with specific extensions (shallow search, max 2 levels deep)
+ */
+function listSourceFilesShallow(rootDir: string, extensions: string[]): string[] {
+  const files: string[] = [];
+  const ignoreDirs = ["node_modules", ".git", "build", "dist", "Pods", ".build", "DerivedData"];
+
+  function scan(dir: string, depth: number): void {
+    if (depth > 2) return;
+    try {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (ignoreDirs.includes(entry.name)) continue;
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scan(fullPath, depth + 1);
+        } else if (extensions.some((ext) => entry.name.endsWith(ext))) {
+          files.push(fullPath);
+        }
+      }
+    } catch {
+      // Ignore permission errors
+    }
+  }
+
+  scan(rootDir, 0);
+  return files;
 }
 
 function countSourceFiles(rootDir: string, _languages: Language[]): number {
