@@ -173,6 +173,7 @@ function generateClaudeMd(projectInfo: ProjectInfo): GeneratedArtifact {
   sections.push("| `/status` | Show current task state |");
   sections.push("| `/done` | Mark current task complete |");
   sections.push("| `/analyze <area>` | Deep-dive into specific code |");
+  sections.push("| `/code-review` | Review changes for quality and security |");
   sections.push("");
 
   // Common Commands based on tech stack
@@ -191,6 +192,20 @@ function generateClaudeMd(projectInfo: ProjectInfo): GeneratedArtifact {
   sections.push("3. **Test Before Done** - Run tests before marking complete");
   sections.push("4. **Update State** - Keep task.md current as you work");
   sections.push("5. **Match Patterns** - Follow existing code conventions");
+  sections.push("6. **TDD Workflow** - Write failing tests first, then implement");
+  sections.push("");
+
+  // Quality Gates
+  sections.push("## Quality Gates");
+  sections.push("");
+  sections.push("Enforced constraints for code quality:");
+  sections.push("");
+  sections.push("| Constraint | Limit | Action |");
+  sections.push("|------------|-------|--------|");
+  sections.push("| Lines per function | 20 max | Decompose immediately |");
+  sections.push("| Parameters per function | 3 max | Use options object |");
+  sections.push("| Lines per file | 200 max | Split by responsibility |");
+  sections.push("| Test coverage | 80% min | Add tests before merge |");
   sections.push("");
 
   // Skills reference
@@ -440,9 +455,16 @@ interface SkillDef {
 
 function getSkillsForStack(stack: TechStack): SkillDef[] {
   const skills: SkillDef[] = [
+    // Core methodology skills
     { name: "pattern-discovery", description: "Finding codebase patterns" },
     { name: "systematic-debugging", description: "Debugging approach" },
     { name: "testing-methodology", description: "Testing strategy" },
+    // Process discipline skills
+    { name: "iterative-development", description: "TDD loops until tests pass" },
+    { name: "commit-hygiene", description: "Atomic commits and PR size limits" },
+    { name: "code-deduplication", description: "Prevent semantic code duplication" },
+    { name: "simplicity-rules", description: "Code complexity constraints" },
+    { name: "security", description: "Security patterns and secrets management" },
   ];
 
   // Add framework-specific skills
@@ -472,10 +494,17 @@ function getSkillsForStack(stack: TechStack): SkillDef[] {
 function generateSkills(stack: TechStack): GeneratedArtifact[] {
   const artifacts: GeneratedArtifact[] = [];
 
-  // Universal skills
+  // Universal methodology skills
   artifacts.push(generatePatternDiscoverySkill());
   artifacts.push(generateSystematicDebuggingSkill());
   artifacts.push(generateTestingMethodologySkill(stack));
+
+  // Process discipline skills (core - always included)
+  artifacts.push(generateIterativeDevelopmentSkill(stack));
+  artifacts.push(generateCommitHygieneSkill());
+  artifacts.push(generateCodeDeduplicationSkill());
+  artifacts.push(generateSimplicityRulesSkill());
+  artifacts.push(generateSecuritySkill(stack));
 
   // Framework-specific skills
   if (stack.frameworks.includes("nextjs")) {
@@ -1347,6 +1376,638 @@ describe('UsersService', () => {
 }
 
 // ============================================================================
+// Process Discipline Skills
+// ============================================================================
+
+function generateIterativeDevelopmentSkill(stack: TechStack): GeneratedArtifact {
+  const testCmd = getTestCommand(stack);
+  const lintCmd = getLintCommand(stack);
+
+  return {
+    type: "skill",
+    path: ".claude/skills/iterative-development.md",
+    content: `---
+name: iterative-development
+description: TDD-driven iterative loops until tests pass
+globs:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.py"
+  - "**/*.go"
+---
+
+# Iterative Development (TDD Loops)
+
+Self-referential development loops where you iterate until completion criteria are met.
+
+## Core Philosophy
+
+\`\`\`
+┌─────────────────────────────────────────────────────────────┐
+│  ITERATION > PERFECTION                                     │
+│  Don't aim for perfect on first try.                        │
+│  Let the loop refine the work.                              │
+├─────────────────────────────────────────────────────────────┤
+│  FAILURES ARE DATA                                          │
+│  Failed tests, lint errors, type mismatches are signals.    │
+│  Use them to guide the next iteration.                      │
+├─────────────────────────────────────────────────────────────┤
+│  CLEAR COMPLETION CRITERIA                                  │
+│  Define exactly what "done" looks like.                     │
+│  Tests passing. Coverage met. Lint clean.                   │
+└─────────────────────────────────────────────────────────────┘
+\`\`\`
+
+## TDD Workflow (Mandatory)
+
+Every implementation task MUST follow this workflow:
+
+### 1. RED: Write Tests First
+\`\`\`bash
+# Write tests based on requirements
+# Run tests - they MUST FAIL
+${testCmd}
+\`\`\`
+
+### 2. GREEN: Implement Feature
+\`\`\`bash
+# Write minimum code to pass tests
+# Run tests - they MUST PASS
+${testCmd}
+\`\`\`
+
+### 3. VALIDATE: Quality Gates
+\`\`\`bash
+# Full quality check
+${lintCmd ? `${lintCmd} && ` : ""}${testCmd}
+\`\`\`
+
+## Completion Criteria Template
+
+For any implementation task, define:
+
+\`\`\`markdown
+### Completion Criteria
+- [ ] All tests passing
+- [ ] Coverage >= 80% (on new code)
+- [ ] Lint clean (no errors)
+- [ ] Type check passing
+\`\`\`
+
+## When to Use This Workflow
+
+| Task Type | Use TDD Loop? |
+|-----------|---------------|
+| New feature | ✅ Always |
+| Bug fix | ✅ Always (write test that reproduces bug first) |
+| Refactoring | ✅ Always (existing tests must stay green) |
+| Spike/exploration | ❌ Skip (but document findings) |
+| Documentation | ❌ Skip |
+
+## Anti-Patterns
+
+- ❌ Writing code before tests
+- ❌ Skipping the RED phase (tests that never fail are useless)
+- ❌ Moving on when tests fail
+- ❌ Large batches (prefer small, focused iterations)
+`,
+    isNew: true,
+  };
+}
+
+function generateCommitHygieneSkill(): GeneratedArtifact {
+  return {
+    type: "skill",
+    path: ".claude/skills/commit-hygiene.md",
+    content: `---
+name: commit-hygiene
+description: Atomic commits, PR size limits, commit thresholds
+globs:
+  - "**/*"
+---
+
+# Commit Hygiene
+
+Keep commits atomic, PRs reviewable, and git history clean.
+
+## Size Thresholds
+
+| Metric | 🟢 Good | 🟡 Warning | 🔴 Commit Now |
+|--------|---------|------------|---------------|
+| Files changed | 1-5 | 6-10 | > 10 |
+| Lines added | < 150 | 150-300 | > 300 |
+| Total changes | < 250 | 250-400 | > 400 |
+
+**Research shows:** PRs > 400 lines have 40%+ defect rates vs 15% for smaller changes.
+
+## When to Commit
+
+### Commit Triggers (Any = Commit)
+
+| Trigger | Action |
+|---------|--------|
+| Test passes | Just got a test green → commit |
+| Feature complete | Finished a function → commit |
+| Refactor done | Renamed across files → commit |
+| Bug fixed | Fixed the issue → commit |
+| Threshold hit | > 5 files or > 200 lines → commit |
+
+### Commit Immediately If
+
+- ✅ Tests are passing after being red
+- ✅ You're about to make a "big change"
+- ✅ You've been coding for 30+ minutes
+- ✅ You're about to try something risky
+- ✅ The current state is "working"
+
+## Atomic Commit Patterns
+
+### Good Commits ✅
+
+\`\`\`
+"Add email validation to signup form"
+- 3 files: validator.ts, signup.tsx, signup.test.ts
+- 120 lines changed
+- Single purpose: email validation
+
+"Fix null pointer in user lookup"
+- 2 files: userService.ts, userService.test.ts
+- 25 lines changed
+- Single purpose: fix one bug
+\`\`\`
+
+### Bad Commits ❌
+
+\`\`\`
+"Add authentication, fix bugs, update styles"
+- 25 files changed, 800 lines
+- Multiple unrelated purposes
+
+"WIP" / "Updates" / "Fix stuff"
+- Unknown scope, no clear purpose
+\`\`\`
+
+## Quick Status Check
+
+Run frequently to check current state:
+
+\`\`\`bash
+# See what's changed
+git status --short
+
+# Count changes
+git diff --shortstat
+
+# Full summary
+git diff --stat HEAD
+\`\`\`
+
+## PR Size Rules
+
+| PR Size | Review Time | Quality |
+|---------|-------------|---------|
+| < 200 lines | < 30 min | High confidence |
+| 200-400 lines | 30-60 min | Good confidence |
+| 400-1000 lines | 1-2 hours | Declining quality |
+| > 1000 lines | Often skipped | Rubber-stamped |
+
+**Best practice:** If a PR will be > 400 lines, split into stacked PRs.
+`,
+    isNew: true,
+  };
+}
+
+function generateCodeDeduplicationSkill(): GeneratedArtifact {
+  return {
+    type: "skill",
+    path: ".claude/skills/code-deduplication.md",
+    content: `---
+name: code-deduplication
+description: Prevent semantic code duplication with capability index
+globs:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.py"
+---
+
+# Code Deduplication
+
+Prevent semantic duplication by maintaining awareness of existing capabilities.
+
+## Core Principle
+
+\`\`\`
+┌─────────────────────────────────────────────────────────────────┐
+│  CHECK BEFORE YOU WRITE                                         │
+│  ─────────────────────────────────────────────────────────────  │
+│  AI doesn't copy/paste - it reimplements.                       │
+│  The problem isn't duplicate code, it's duplicate PURPOSE.      │
+│                                                                 │
+│  Before writing ANY new function:                               │
+│  1. Search codebase for similar functionality                   │
+│  2. Check utils/, helpers/, lib/ for existing implementations   │
+│  3. Extend existing code if possible                            │
+│  4. Only create new if nothing suitable exists                  │
+└─────────────────────────────────────────────────────────────────┘
+\`\`\`
+
+## Before Writing New Code
+
+### Search Checklist
+
+1. **Search by purpose**: "format date", "validate email", "fetch user"
+2. **Search common locations**:
+   - \`src/utils/\` or \`lib/\`
+   - \`src/helpers/\`
+   - \`src/common/\`
+   - \`src/shared/\`
+3. **Search by function signature**: Similar inputs/outputs
+
+### Common Duplicate Candidates
+
+| Category | Look For |
+|----------|----------|
+| Date/Time | formatDate, parseDate, isExpired, addDays |
+| Validation | isEmail, isPhone, isURL, isUUID |
+| Strings | slugify, truncate, capitalize, pluralize |
+| API | fetchUser, createItem, handleError |
+| Auth | validateToken, requireAuth, getCurrentUser |
+
+## If Similar Code Exists
+
+### Option 1: Reuse directly
+\`\`\`typescript
+// Import and use existing function
+import { formatDate } from '@/utils/dates';
+\`\`\`
+
+### Option 2: Extend with options
+\`\`\`typescript
+// Add optional parameter to existing function
+export function formatDate(
+  date: Date,
+  format: string = 'short',
+  locale?: string  // NEW: added locale support
+): string { ... }
+\`\`\`
+
+### Option 3: Compose from existing
+\`\`\`typescript
+// Build on existing utilities
+export function formatDateRange(start: Date, end: Date) {
+  return \`\${formatDate(start)} - \${formatDate(end)}\`;
+}
+\`\`\`
+
+## File Header Pattern
+
+Document what each file provides:
+
+\`\`\`typescript
+/**
+ * @file User validation utilities
+ * @description Email, phone, and identity validation functions.
+ *
+ * Key exports:
+ * - isEmail(email) - Validates email format
+ * - isPhone(phone, country?) - Validates phone with country
+ * - isValidUsername(username) - Checks username rules
+ */
+\`\`\`
+
+## Anti-Patterns
+
+- ❌ Writing date formatter without checking utils/
+- ❌ Creating new API client when one exists
+- ❌ Duplicating validation logic across files
+- ❌ Copy-pasting functions between files
+- ❌ "I'll refactor later" (you won't)
+`,
+    isNew: true,
+  };
+}
+
+function generateSimplicityRulesSkill(): GeneratedArtifact {
+  return {
+    type: "skill",
+    path: ".claude/skills/simplicity-rules.md",
+    content: `---
+name: simplicity-rules
+description: Enforced code complexity constraints
+globs:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.py"
+  - "**/*.go"
+---
+
+# Simplicity Rules
+
+Complexity is the enemy. Every line of code is a liability.
+
+## Enforced Limits
+
+**CRITICAL: These limits are non-negotiable. Check and enforce for EVERY file.**
+
+### Function Level
+
+| Constraint | Limit | Action if Exceeded |
+|------------|-------|-------------------|
+| Lines per function | 20 max | Decompose immediately |
+| Parameters | 3 max | Use options object |
+| Nesting levels | 2 max | Flatten with early returns |
+
+### File Level
+
+| Constraint | Limit | Action if Exceeded |
+|------------|-------|-------------------|
+| Lines per file | 200 max | Split by responsibility |
+| Functions per file | 10 max | Split into modules |
+
+### Module Level
+
+| Constraint | Limit | Reason |
+|------------|-------|--------|
+| Directory nesting | 3 levels max | Flat is better |
+| Circular deps | 0 | Never acceptable |
+
+## Enforcement Protocol
+
+**Before completing ANY file:**
+
+\`\`\`
+1. Count total lines     → if > 200, STOP and split
+2. Count functions       → if > 10, STOP and split
+3. Check function length → if any > 20 lines, decompose
+4. Check parameters      → if any > 3, refactor to options object
+\`\`\`
+
+## Violation Response
+
+When limits are exceeded:
+
+\`\`\`
+⚠️ FILE SIZE VIOLATION DETECTED
+
+[filename] has [X] lines (limit: 200)
+
+Splitting into:
+- [filename-a].ts - [responsibility A]
+- [filename-b].ts - [responsibility B]
+\`\`\`
+
+**Never defer refactoring.** Fix violations immediately.
+
+## Decomposition Patterns
+
+### Long Function → Multiple Functions
+
+\`\`\`typescript
+// BEFORE: 40 lines
+function processOrder(order) {
+  // validate... 10 lines
+  // calculate totals... 15 lines
+  // apply discounts... 10 lines
+  // save... 5 lines
+}
+
+// AFTER: 4 functions, each < 15 lines
+function processOrder(order) {
+  validateOrder(order);
+  const totals = calculateTotals(order);
+  const finalPrice = applyDiscounts(totals, order.coupons);
+  return saveOrder({ ...order, finalPrice });
+}
+\`\`\`
+
+### Many Parameters → Options Object
+
+\`\`\`typescript
+// BEFORE: 6 parameters
+function createUser(name, email, password, role, team, settings) { }
+
+// AFTER: 1 options object
+interface CreateUserOptions {
+  name: string;
+  email: string;
+  password: string;
+  role?: string;
+  team?: string;
+  settings?: UserSettings;
+}
+function createUser(options: CreateUserOptions) { }
+\`\`\`
+
+### Deep Nesting → Early Returns
+
+\`\`\`typescript
+// BEFORE: 4 levels deep
+function process(data) {
+  if (data) {
+    if (data.valid) {
+      if (data.items) {
+        for (const item of data.items) {
+          // actual logic here
+        }
+      }
+    }
+  }
+}
+
+// AFTER: 1 level deep
+function process(data) {
+  if (!data?.valid || !data.items) return;
+
+  for (const item of data.items) {
+    // actual logic here
+  }
+}
+\`\`\`
+
+## Anti-Patterns
+
+- ❌ God objects/files (do everything)
+- ❌ "Just one more line" (compound violations)
+- ❌ "I'll split it later" (you won't)
+- ❌ Deep inheritance hierarchies
+- ❌ Complex conditionals without extraction
+`,
+    isNew: true,
+  };
+}
+
+function generateSecuritySkill(stack: TechStack): GeneratedArtifact {
+  const isJS = stack.languages.includes("typescript") || stack.languages.includes("javascript");
+  const isPython = stack.languages.includes("python");
+
+  return {
+    type: "skill",
+    path: ".claude/skills/security.md",
+    content: `---
+name: security
+description: Security best practices, secrets management, OWASP patterns
+globs:
+  - "**/*"
+---
+
+# Security Best Practices
+
+Security is not optional. Every project must pass security checks.
+
+## Required .gitignore Entries
+
+**NEVER commit these:**
+
+\`\`\`gitignore
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Secrets and credentials
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+*-credentials.json
+service-account*.json
+
+# IDE secrets
+.idea/
+.vscode/settings.json
+\`\`\`
+
+## Environment Variables
+
+### Create .env.example
+
+Document required vars without values:
+
+\`\`\`bash
+# Server-side only (never expose to client)
+DATABASE_URL=
+API_SECRET_KEY=
+ANTHROPIC_API_KEY=
+
+# Client-side safe (public, non-sensitive)
+${isJS ? "VITE_API_URL=\nNEXT_PUBLIC_SITE_URL=" : "API_BASE_URL="}
+\`\`\`
+
+${
+  isJS
+    ? `### Frontend Exposure Rules
+
+| Framework | Client-Exposed Prefix | Server-Only |
+|-----------|----------------------|-------------|
+| Vite | \`VITE_*\` | No prefix |
+| Next.js | \`NEXT_PUBLIC_*\` | No prefix |
+| CRA | \`REACT_APP_*\` | N/A |
+
+**CRITICAL:** Never put secrets in client-exposed env vars!
+
+\`\`\`typescript
+// ❌ WRONG - Secret exposed to browser
+const key = import.meta.env.VITE_API_SECRET;
+
+// ✅ CORRECT - Secret stays server-side
+const key = process.env.API_SECRET; // in API route only
+\`\`\`
+`
+    : ""
+}
+
+### Validate at Startup
+
+${
+  isJS
+    ? `\`\`\`typescript
+import { z } from 'zod';
+
+const envSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  API_SECRET_KEY: z.string().min(32),
+  NODE_ENV: z.enum(['development', 'production', 'test']),
+});
+
+export const env = envSchema.parse(process.env);
+\`\`\``
+    : ""
+}
+${
+  isPython
+    ? `\`\`\`python
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    database_url: str
+    api_secret_key: str
+    environment: str = "development"
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+\`\`\``
+    : ""
+}
+
+## OWASP Top 10 Checklist
+
+| Vulnerability | Prevention |
+|---------------|------------|
+| Injection (SQL, NoSQL, Command) | Parameterized queries, input validation |
+| Broken Auth | Secure session management, MFA |
+| Sensitive Data Exposure | Encryption at rest and in transit |
+| XXE | Disable external entity processing |
+| Broken Access Control | Verify permissions on every request |
+| Security Misconfiguration | Secure defaults, minimal permissions |
+| XSS | Output encoding, CSP headers |
+| Insecure Deserialization | Validate all serialized data |
+| Using Vulnerable Components | Keep dependencies updated |
+| Insufficient Logging | Log security events, monitor |
+
+## Input Validation
+
+\`\`\`
+RULE: Never trust user input. Validate everything.
+
+- Validate type, length, format, range
+- Sanitize before storage
+- Encode before output
+- Use allowlists over denylists
+\`\`\`
+
+## Secrets Detection
+
+Before committing, check for:
+
+- API keys (usually 32+ chars, specific patterns)
+- Passwords in code
+- Connection strings with credentials
+- Private keys (BEGIN RSA/EC/PRIVATE KEY)
+- Tokens (jwt, bearer, oauth)
+
+## Security Review Checklist
+
+Before PR merge:
+
+- [ ] No secrets in code or config
+- [ ] Input validation on all user data
+- [ ] Output encoding where displayed
+- [ ] Authentication checked on protected routes
+- [ ] Authorization verified for resources
+- [ ] Dependencies scanned for vulnerabilities
+- [ ] Error messages don't leak internals
+`,
+    isNew: true,
+  };
+}
+
+// ============================================================================
 // Agents Generator
 // ============================================================================
 
@@ -1703,6 +2364,7 @@ function generateCommands(): GeneratedArtifact[] {
     generateStatusCommand(),
     generateDoneCommand(),
     generateAnalyzeCommand(),
+    generateCodeReviewCommand(),
   ];
 }
 
@@ -1846,6 +2508,72 @@ What this area depends on and what depends on it.
 
 ### Recommendations
 Any improvements or concerns noted.
+`,
+    isNew: true,
+  };
+}
+
+function generateCodeReviewCommand(): GeneratedArtifact {
+  return {
+    type: "command",
+    path: ".claude/commands/code-review.md",
+    content: `---
+allowed-tools: Read, Glob, Grep, Bash(git diff), Bash(git status), Bash(git log)
+description: Review code changes for quality, security, and best practices
+---
+
+# Code Review
+
+## Changes to Review
+
+!git diff --stat HEAD~1 2>/dev/null || git diff --stat
+
+## Review Process
+
+Analyze all changes for:
+
+### 1. Security (Critical)
+- [ ] No secrets/credentials in code
+- [ ] Input validation present
+- [ ] Output encoding where needed
+- [ ] Auth/authz checks on protected routes
+
+### 2. Quality
+- [ ] Functions ≤ 20 lines
+- [ ] Files ≤ 200 lines
+- [ ] No code duplication
+- [ ] Clear naming
+- [ ] Proper error handling
+
+### 3. Testing
+- [ ] Tests exist for new code
+- [ ] Edge cases covered
+- [ ] Tests are meaningful (not just for coverage)
+
+### 4. Style
+- [ ] Matches existing patterns
+- [ ] Consistent formatting
+- [ ] No commented-out code
+
+## Output Format
+
+For each finding, include file:line reference:
+
+### Critical (Must Fix)
+Issues that block merge
+
+### Warning (Should Fix)
+Issues that should be addressed
+
+### Suggestion (Consider)
+Optional improvements
+
+## Summary
+
+Provide:
+1. Overall assessment (Ready / Changes Needed / Not Ready)
+2. Count of findings by severity
+3. Top priorities to address
 `,
     isNew: true,
   };
