@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -134,6 +134,112 @@ describe("promptNewProject", () => {
     };
     const result = await promptNewProject(args);
     expect(result).toBeNull();
+  });
+
+  it("returns preferences when user completes prompts", async () => {
+    // Mock the prompts module
+    mock.module("prompts", () => {
+      return {
+        default: async () => ({
+          description: "Build an API",
+          primaryLanguage: "typescript",
+          framework: "nextjs",
+        }),
+      };
+    });
+
+    // Re-import to get mocked version
+    const { promptNewProject: mockedPrompt } = await import("./cli.js");
+
+    const args = {
+      help: false,
+      version: false,
+      force: false,
+      interactive: true,
+      verbose: false,
+    };
+
+    const result = await mockedPrompt(args);
+    expect(result).not.toBeNull();
+    expect(result?.description).toBe("Build an API");
+    expect(result?.primaryLanguage).toBe("typescript");
+    expect(result?.framework).toBe("nextjs");
+  });
+
+  it("returns null when user cancels", async () => {
+    // Mock prompts to return empty (user cancelled)
+    mock.module("prompts", () => {
+      return {
+        default: async () => ({
+          description: undefined, // User cancelled
+        }),
+      };
+    });
+
+    const { promptNewProject: mockedPrompt } = await import("./cli.js");
+
+    const args = {
+      help: false,
+      version: false,
+      force: false,
+      interactive: true,
+      verbose: false,
+    };
+
+    const result = await mockedPrompt(args);
+    expect(result).toBeNull();
+  });
+
+  it("uses default language when not provided", async () => {
+    mock.module("prompts", () => {
+      return {
+        default: async () => ({
+          description: "My project",
+          primaryLanguage: null, // No language selected
+          framework: null,
+        }),
+      };
+    });
+
+    const { promptNewProject: mockedPrompt } = await import("./cli.js");
+
+    const args = {
+      help: false,
+      version: false,
+      force: false,
+      interactive: true,
+      verbose: false,
+    };
+
+    const result = await mockedPrompt(args);
+    expect(result).not.toBeNull();
+    expect(result?.primaryLanguage).toBe("typescript"); // Default
+  });
+
+  it("handles Python framework selection", async () => {
+    mock.module("prompts", () => {
+      return {
+        default: async () => ({
+          description: "Python API",
+          primaryLanguage: "python",
+          framework: "fastapi",
+        }),
+      };
+    });
+
+    const { promptNewProject: mockedPrompt } = await import("./cli.js");
+
+    const args = {
+      help: false,
+      version: false,
+      force: false,
+      interactive: true,
+      verbose: false,
+    };
+
+    const result = await mockedPrompt(args);
+    expect(result?.primaryLanguage).toBe("python");
+    expect(result?.framework).toBe("fastapi");
   });
 });
 
