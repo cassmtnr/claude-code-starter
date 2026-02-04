@@ -1,3 +1,11 @@
+## [0.4.0](https://github.com/cassmtnr/claude-code-starter/compare/0.3.0...0.4.0) (2026-02-04)
+
+### Features
+
+* add interactive prompts for new project setup in CLI tests ([733d150](https://github.com/cassmtnr/claude-code-starter/commit/733d15040976f574e949ee0e55cfdb44fbdf3ceb))
+* enhance CLI and generator with Swift/iOS and Android/Kotlin patterns ([7048a5f](https://github.com/cassmtnr/claude-code-starter/commit/7048a5fe245fa5e7ae6e567e9b6fb67ffb0b3301))
+* enhance framework formatting with additional technology support ([a773c8a](https://github.com/cassmtnr/claude-code-starter/commit/a773c8a1130d7c8ab4f66e14f181bc9f84cc0daa))
+
 ## [0.2.0](https://github.com/cassmtnr/claude-code-starter/compare/0.1.3...0.2.0) (2026-01-24)
 
 ### Features
