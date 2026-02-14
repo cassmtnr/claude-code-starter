@@ -1,3 +1,9 @@
+## [0.7.0](https://github.com/cassmtnr/claude-code-starter/compare/0.6.0...0.7.0) (2026-02-14)
+
+### Features
+
+* remove dead code and static CLAUDE.md generation from the project ([e45a53e](https://github.com/cassmtnr/claude-code-starter/commit/e45a53e12e2ea5e543873dfc272941ccd63dc093))
+
 ## [0.6.0](https://github.com/cassmtnr/claude-code-starter/compare/0.5.0...0.6.0) (2026-02-14)
 
 ### Features
