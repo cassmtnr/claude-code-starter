@@ -3,7 +3,6 @@
  * @description Dynamic artifact generation for Claude Code configurations.
  *
  * This module generates tailored Claude Code artifacts based on detected tech stack:
- * - CLAUDE.md - Project-specific instructions
  * - settings.json - Permissions configuration
  * - Skills - Methodology guides + framework-specific patterns
  * - Agents - Code reviewer, test writer
@@ -22,28 +21,19 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type {
-  Framework,
-  GeneratedArtifact,
-  GenerationResult,
-  Language,
-  ProjectInfo,
-  TechStack,
-} from "./types.js";
+import type { GeneratedArtifact, GenerationResult, ProjectInfo, TechStack } from "./types.js";
 
 // ============================================================================
 // Artifact Generator
 // ============================================================================
 
 /**
- * Generate all Claude Code artifacts based on project analysis
+ * Generate all Claude Code supporting artifacts based on project analysis.
+ * CLAUDE.md is generated separately by Claude CLI via deep project analysis.
  */
 export function generateArtifacts(projectInfo: ProjectInfo): GenerationResult {
   const artifacts: GeneratedArtifact[] = [];
   const { techStack, rootDir } = projectInfo;
-
-  // Generate CLAUDE.md
-  artifacts.push(generateClaudeMd(projectInfo));
 
   // Generate settings.json
   artifacts.push(generateSettings(techStack));
@@ -98,9 +88,8 @@ export function writeArtifacts(
     const exists = fs.existsSync(fullPath);
 
     if (exists && !force) {
-      // Check if it's a file we should always update vs preserve
-      const shouldPreserve =
-        artifact.path.includes("state/task.md") || artifact.path === ".claude/CLAUDE.md";
+      // Check if it's a file we should always preserve
+      const shouldPreserve = artifact.path.includes("state/task.md");
 
       if (shouldPreserve) {
         skipped.push(artifact.path);
@@ -118,236 +107,6 @@ export function writeArtifacts(
   }
 
   return { created, updated, skipped };
-}
-
-// ============================================================================
-// CLAUDE.md Generator
-// ============================================================================
-
-function generateClaudeMd(projectInfo: ProjectInfo): GeneratedArtifact {
-  const { techStack, name, description } = projectInfo;
-
-  const sections: string[] = [];
-
-  // Header
-  sections.push(`# ${name}`);
-  sections.push("");
-
-  if (description) {
-    sections.push(`> ${description}`);
-    sections.push("");
-  }
-
-  // Quick Start
-  sections.push("## Start Here");
-  sections.push("");
-  sections.push("Check `.claude/state/task.md` for your current task.");
-  sections.push("");
-
-  // Tech Stack Summary
-  sections.push("## Tech Stack");
-  sections.push("");
-  if (techStack.primaryLanguage) {
-    sections.push(`- **Language**: ${formatLanguage(techStack.primaryLanguage)}`);
-  }
-  if (techStack.primaryFramework) {
-    sections.push(`- **Framework**: ${formatFramework(techStack.primaryFramework)}`);
-  }
-  if (techStack.packageManager) {
-    sections.push(`- **Package Manager**: ${techStack.packageManager}`);
-  }
-  if (techStack.testingFramework) {
-    sections.push(`- **Testing**: ${techStack.testingFramework}`);
-  }
-  if (techStack.linter) {
-    sections.push(`- **Linter**: ${techStack.linter}`);
-  }
-  sections.push("");
-
-  // Commands
-  sections.push("## Commands");
-  sections.push("");
-  sections.push("| Command | Purpose |");
-  sections.push("|---------|---------|");
-  sections.push("| `/task <desc>` | Start or switch to a new task |");
-  sections.push("| `/status` | Show current task state |");
-  sections.push("| `/done` | Mark current task complete |");
-  sections.push("| `/analyze <area>` | Deep-dive into specific code |");
-  sections.push("| `/code-review` | Review changes for quality and security |");
-  sections.push("");
-
-  // Common Commands based on tech stack
-  sections.push("## Common Operations");
-  sections.push("");
-  sections.push("```bash");
-  sections.push(getCommonCommands(techStack));
-  sections.push("```");
-  sections.push("");
-
-  // Project Rules
-  sections.push("## Rules");
-  sections.push("");
-  sections.push("1. **State First** - Always read `.claude/state/task.md` when resuming");
-  sections.push("2. **One Task** - Focus on one thing at a time");
-  sections.push("3. **Test Before Done** - Run tests before marking complete");
-  sections.push("4. **Update State** - Keep task.md current as you work");
-  sections.push("5. **Match Patterns** - Follow existing code conventions");
-  sections.push("6. **TDD Workflow** - Write failing tests first, then implement");
-  sections.push("");
-
-  // Quality Gates
-  sections.push("## Quality Gates");
-  sections.push("");
-  sections.push("Enforced constraints for code quality:");
-  sections.push("");
-  sections.push("| Constraint | Limit | Action |");
-  sections.push("|------------|-------|--------|");
-  sections.push("| Lines per function | 20 max | Decompose immediately |");
-  sections.push("| Parameters per function | 3 max | Use options object |");
-  sections.push("| Lines per file | 200 max | Split by responsibility |");
-  sections.push("| Test coverage | 80% min | Add tests before merge |");
-  sections.push("");
-
-  // Skills reference
-  sections.push("## Skills");
-  sections.push("");
-  sections.push("Reference these for specialized workflows:");
-  const skills = getSkillsForStack(techStack);
-  for (const skill of skills) {
-    sections.push(`- \`.claude/skills/${skill.name}.md\` - ${skill.description}`);
-  }
-  sections.push("");
-
-  // Agents reference
-  const agents = getAgentsForStack(techStack);
-  if (agents.length > 0) {
-    sections.push("## Agents");
-    sections.push("");
-    sections.push("Specialized agents available:");
-    for (const agent of agents) {
-      sections.push(`- \`${agent.name}\` - ${agent.description}`);
-    }
-    sections.push("");
-  }
-
-  // File References
-  sections.push("## File References");
-  sections.push("");
-  sections.push("Use `path/to/file.ts:123` format when referencing code.");
-  sections.push("");
-
-  return {
-    type: "claude-md",
-    path: ".claude/CLAUDE.md",
-    content: sections.join("\n"),
-    isNew: true,
-  };
-}
-
-function getCommonCommands(stack: TechStack): string {
-  const commands: string[] = [];
-
-  // Package manager commands
-  switch (stack.packageManager) {
-    case "bun":
-      commands.push("# Install dependencies");
-      commands.push("bun install");
-      commands.push("");
-      commands.push("# Run development server");
-      commands.push("bun dev");
-      commands.push("");
-      commands.push("# Run tests");
-      commands.push("bun test");
-      commands.push("");
-      commands.push("# Build");
-      commands.push("bun run build");
-      break;
-    case "pnpm":
-      commands.push("# Install dependencies");
-      commands.push("pnpm install");
-      commands.push("");
-      commands.push("# Run development server");
-      commands.push("pnpm dev");
-      commands.push("");
-      commands.push("# Run tests");
-      commands.push("pnpm test");
-      break;
-    case "yarn":
-      commands.push("# Install dependencies");
-      commands.push("yarn");
-      commands.push("");
-      commands.push("# Run development server");
-      commands.push("yarn dev");
-      commands.push("");
-      commands.push("# Run tests");
-      commands.push("yarn test");
-      break;
-    case "npm":
-      commands.push("# Install dependencies");
-      commands.push("npm install");
-      commands.push("");
-      commands.push("# Run development server");
-      commands.push("npm run dev");
-      commands.push("");
-      commands.push("# Run tests");
-      commands.push("npm test");
-      break;
-    case "pip":
-    case "poetry":
-      commands.push("# Install dependencies");
-      commands.push(
-        stack.packageManager === "poetry" ? "poetry install" : "pip install -r requirements.txt"
-      );
-      commands.push("");
-      commands.push("# Run tests");
-      commands.push("pytest");
-      commands.push("");
-      commands.push("# Run server");
-      commands.push("uvicorn main:app --reload");
-      break;
-    case "cargo":
-      commands.push("# Build");
-      commands.push("cargo build");
-      commands.push("");
-      commands.push("# Run tests");
-      commands.push("cargo test");
-      commands.push("");
-      commands.push("# Run");
-      commands.push("cargo run");
-      break;
-    case "go":
-      commands.push("# Run tests");
-      commands.push("go test ./...");
-      commands.push("");
-      commands.push("# Build");
-      commands.push("go build");
-      commands.push("");
-      commands.push("# Run");
-      commands.push("go run .");
-      break;
-    default:
-      commands.push("# No package manager detected");
-      commands.push("# Add your common commands here");
-  }
-
-  // Add linting if available
-  if (stack.linter) {
-    commands.push("");
-    commands.push("# Lint");
-    switch (stack.linter) {
-      case "eslint":
-        commands.push(`${stack.packageManager === "bun" ? "bun" : "npx"} eslint .`);
-        break;
-      case "biome":
-        commands.push(`${stack.packageManager === "bun" ? "bun" : "npx"} biome check .`);
-        break;
-      case "ruff":
-        commands.push("ruff check .");
-        break;
-    }
-  }
-
-  return commands.join("\n");
 }
 
 // ============================================================================
@@ -447,71 +206,6 @@ function generateSettings(stack: TechStack): GeneratedArtifact {
 // ============================================================================
 // Skills Generator
 // ============================================================================
-
-interface SkillDef {
-  name: string;
-  description: string;
-}
-
-function getSkillsForStack(stack: TechStack): SkillDef[] {
-  const skills: SkillDef[] = [
-    // Core methodology skills
-    { name: "pattern-discovery", description: "Finding codebase patterns" },
-    { name: "systematic-debugging", description: "Debugging approach" },
-    { name: "testing-methodology", description: "Testing strategy" },
-    // Process discipline skills
-    { name: "iterative-development", description: "TDD loops until tests pass" },
-    { name: "commit-hygiene", description: "Atomic commits and PR size limits" },
-    { name: "code-deduplication", description: "Prevent semantic code duplication" },
-    { name: "simplicity-rules", description: "Code complexity constraints" },
-    { name: "security", description: "Security patterns and secrets management" },
-  ];
-
-  // Add framework-specific skills
-  if (stack.frameworks.includes("nextjs")) {
-    skills.push({ name: "nextjs-patterns", description: "Next.js App Router patterns" });
-  }
-
-  if (stack.frameworks.includes("react") || stack.frameworks.includes("nextjs")) {
-    skills.push({ name: "react-components", description: "React component patterns" });
-  }
-
-  if (stack.frameworks.includes("fastapi")) {
-    skills.push({ name: "fastapi-patterns", description: "FastAPI endpoint patterns" });
-  }
-
-  if (stack.frameworks.includes("nestjs")) {
-    skills.push({ name: "nestjs-patterns", description: "NestJS module patterns" });
-  }
-
-  if (stack.frameworks.includes("prisma") || stack.frameworks.includes("drizzle")) {
-    skills.push({ name: "database-patterns", description: "Database and ORM patterns" });
-  }
-
-  // Swift/iOS frameworks
-  if (stack.frameworks.includes("swiftui")) {
-    skills.push({ name: "swiftui-patterns", description: "SwiftUI declarative UI patterns" });
-  }
-
-  if (stack.frameworks.includes("uikit")) {
-    skills.push({ name: "uikit-patterns", description: "UIKit view controller patterns" });
-  }
-
-  if (stack.frameworks.includes("vapor")) {
-    skills.push({ name: "vapor-patterns", description: "Vapor server-side Swift patterns" });
-  }
-
-  // Android/Kotlin frameworks
-  if (stack.frameworks.includes("jetpack-compose")) {
-    skills.push({ name: "compose-patterns", description: "Jetpack Compose UI patterns" });
-  }
-
-  if (stack.frameworks.includes("android-views")) {
-    skills.push({ name: "android-views-patterns", description: "Android XML views patterns" });
-  }
-
-  return skills;
-}
 
 function generateSkills(stack: TechStack): GeneratedArtifact[] {
   const artifacts: GeneratedArtifact[] = [];
@@ -2996,24 +2690,6 @@ Before PR merge:
 // Agents Generator
 // ============================================================================
 
-interface AgentDef {
-  name: string;
-  description: string;
-}
-
-function getAgentsForStack(stack: TechStack): AgentDef[] {
-  const agents: AgentDef[] = [
-    { name: "code-reviewer", description: "Reviews code for quality and security" },
-    { name: "test-writer", description: "Generates tests for code" },
-  ];
-
-  if (stack.hasDocker) {
-    agents.push({ name: "docker-helper", description: "Helps with Docker and containerization" });
-  }
-
-  return agents;
-}
-
 function generateAgents(stack: TechStack): GeneratedArtifact[] {
   const artifacts: GeneratedArtifact[] = [];
 
@@ -3562,94 +3238,4 @@ Provide:
 `,
     isNew: true,
   };
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function formatLanguage(lang: Language): string {
-  const names: Record<Language, string> = {
-    typescript: "TypeScript",
-    javascript: "JavaScript",
-    python: "Python",
-    go: "Go",
-    rust: "Rust",
-    java: "Java",
-    ruby: "Ruby",
-    csharp: "C#",
-    swift: "Swift",
-    kotlin: "Kotlin",
-    php: "PHP",
-    cpp: "C++",
-  };
-  return names[lang] || lang;
-}
-
-function formatFramework(fw: Framework): string {
-  const names: Record<Framework, string> = {
-    // JavaScript/TypeScript Frontend
-    nextjs: "Next.js",
-    react: "React",
-    vue: "Vue.js",
-    nuxt: "Nuxt",
-    svelte: "Svelte",
-    sveltekit: "SvelteKit",
-    angular: "Angular",
-    astro: "Astro",
-    remix: "Remix",
-    gatsby: "Gatsby",
-    solid: "Solid.js",
-    // JavaScript/TypeScript Backend
-    express: "Express",
-    nestjs: "NestJS",
-    fastify: "Fastify",
-    hono: "Hono",
-    elysia: "Elysia",
-    koa: "Koa",
-    // Python
-    fastapi: "FastAPI",
-    django: "Django",
-    flask: "Flask",
-    starlette: "Starlette",
-    // Go
-    gin: "Gin",
-    echo: "Echo",
-    fiber: "Fiber",
-    // Rust
-    actix: "Actix",
-    axum: "Axum",
-    rocket: "Rocket",
-    // Ruby
-    rails: "Rails",
-    sinatra: "Sinatra",
-    // Java/Kotlin
-    spring: "Spring",
-    quarkus: "Quarkus",
-    // Android
-    "jetpack-compose": "Jetpack Compose",
-    "android-views": "Android Views",
-    room: "Room",
-    hilt: "Hilt",
-    "ktor-android": "Ktor",
-    // Swift/iOS
-    swiftui: "SwiftUI",
-    uikit: "UIKit",
-    vapor: "Vapor",
-    swiftdata: "SwiftData",
-    combine: "Combine",
-    // CSS/UI
-    tailwind: "Tailwind CSS",
-    shadcn: "shadcn/ui",
-    chakra: "Chakra UI",
-    mui: "Material UI",
-    // Database/ORM
-    prisma: "Prisma",
-    drizzle: "Drizzle",
-    typeorm: "TypeORM",
-    sequelize: "Sequelize",
-    mongoose: "Mongoose",
-    sqlalchemy: "SQLAlchemy",
-  };
-  return names[fw] || fw;
 }

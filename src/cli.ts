@@ -23,6 +23,7 @@
  * npx claude-code-starter -y  // non-interactive
  */
 
+import { execSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +31,7 @@ import pc from "picocolors";
 import prompts from "prompts";
 import { analyzeRepository, summarizeTechStack } from "./analyzer.js";
 import { generateArtifacts, writeArtifacts } from "./generator.js";
+import { getAnalysisPrompt } from "./prompt.js";
 import type { Args, Framework, Language, NewProjectPreferences, ProjectInfo } from "./types.js";
 
 // ============================================================================
@@ -81,12 +83,15 @@ ${pc.bold("OPTIONS")}
 
 ${pc.bold("WHAT IT DOES")}
   1. Analyzes your repository's tech stack
-  2. Detects frameworks, languages, and tools
+  2. Launches Claude CLI to deeply analyze your codebase
   3. Generates tailored Claude Code configurations:
-     - CLAUDE.md with project-specific instructions
+     - CLAUDE.md with project-specific instructions (via Claude analysis)
      - Skills for your frameworks (Next.js, FastAPI, etc.)
      - Agents for code review and testing
      - Rules matching your code style
+
+${pc.bold("REQUIREMENTS")}
+  Claude CLI must be installed: https://claude.ai/download
 
 ${pc.bold("MORE INFO")}
   https://github.com/cassmtnr/claude-code-starter
@@ -347,6 +352,70 @@ export function formatFramework(fw: Framework): string {
 }
 
 // ============================================================================
+// Claude CLI Integration
+// ============================================================================
+
+/**
+ * Check if the Claude CLI is installed and accessible
+ */
+export function checkClaudeCli(): boolean {
+  try {
+    execSync("claude --version", { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Run Claude-powered deep project analysis.
+ * Spawns the claude CLI with the analysis prompt to generate a professional CLAUDE.md.
+ */
+export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo): Promise<boolean> {
+  return new Promise((resolve) => {
+    const prompt = getAnalysisPrompt(projectInfo);
+
+    console.log(pc.cyan("Launching Claude for deep project analysis..."));
+    console.log(pc.gray("Claude will read your codebase and generate a comprehensive CLAUDE.md"));
+    console.log();
+
+    const child = spawn(
+      "claude",
+      [
+        "-p",
+        prompt,
+        "--allowedTools",
+        "Read",
+        "Glob",
+        "Grep",
+        `Write(.claude/**)`,
+        `Edit(.claude/**)`,
+      ],
+      {
+        cwd: projectDir,
+        stdio: ["ignore", "inherit", "inherit"],
+      }
+    );
+
+    child.on("error", (err) => {
+      console.error(pc.red(`Failed to launch Claude CLI: ${err.message}`));
+      resolve(false);
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        console.log();
+        console.log(pc.green("Claude analysis complete!"));
+        resolve(true);
+      } else {
+        console.error(pc.red(`Claude exited with code ${code}`));
+        resolve(false);
+      }
+    });
+  });
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -417,16 +486,21 @@ async function main(): Promise<void> {
     console.log();
   }
 
-  // Step 4: Generate artifacts
-  console.log(pc.gray("Generating configuration..."));
+  // Step 4: Require Claude CLI
+  if (!checkClaudeCli()) {
+    console.error(pc.red("Claude CLI is required but not found."));
+    console.error(pc.gray("Install it from: https://claude.ai/download"));
+    process.exit(1);
+  }
+
+  // Step 5: Generate supporting artifacts (skills, agents, rules, commands, settings)
+  console.log(pc.gray("Generating supporting configuration..."));
   console.log();
 
   const result = generateArtifacts(projectInfo);
 
-  // Step 5: Write artifacts to disk
   const { created, updated, skipped } = writeArtifacts(result.artifacts, projectDir, args.force);
 
-  // Show results
   if (created.length > 0) {
     console.log(pc.green("Created:"));
     for (const file of created) {
@@ -453,13 +527,22 @@ async function main(): Promise<void> {
   // Step 6: Create task file
   createTaskFile(projectInfo, preferences);
 
-  // Step 7: Show summary
-  const totalFiles = created.length + updated.length;
+  // Step 7: Run Claude-powered deep analysis for CLAUDE.md
+  const success = await runClaudeAnalysis(projectDir, projectInfo);
+
+  if (!success) {
+    console.error(pc.red("Claude analysis failed. Please try again."));
+    process.exit(1);
+  }
+
+  // Step 8: Show summary
+  const totalFiles = created.length + updated.length + 1;
+  console.log();
   console.log(pc.green(`Done! (${totalFiles} files)`));
   console.log();
 
-  // Show what was generated
   console.log(pc.bold("Generated for your stack:"));
+  console.log(pc.cyan("  CLAUDE.md (deep analysis by Claude)"));
 
   const skills = result.artifacts.filter((a) => a.type === "skill");
   const agents = result.artifacts.filter((a) => a.type === "agent");
@@ -482,13 +565,9 @@ async function main(): Promise<void> {
   console.log();
   console.log(`${pc.cyan("Next step:")} Run ${pc.bold("claude")} to start working!`);
   console.log();
-
-  // Tips based on project state
-  if (!projectInfo.isExisting) {
-    console.log(pc.gray("Tip: Use /task to define your first task"));
-  } else {
-    console.log(pc.gray("Tip: Use /analyze to explore specific areas of your codebase"));
-  }
+  console.log(
+    pc.gray("Your CLAUDE.md was generated by deep analysis - review it with: cat .claude/CLAUDE.md")
+  );
 }
 
 main().catch((err) => {
