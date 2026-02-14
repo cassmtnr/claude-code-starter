@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { analyzeRepository, detectTechStack, summarizeTechStack } from "./analyzer.js";
 import {
+  checkClaudeCli,
   createTaskFile,
   formatFramework,
   formatLanguage,
@@ -15,6 +16,7 @@ import {
   showTechStack,
 } from "./cli.js";
 import { generateArtifacts, writeArtifacts } from "./generator.js";
+import { getAnalysisPrompt } from "./prompt.js";
 
 // ============================================================================
 // Test Utilities
@@ -1056,25 +1058,6 @@ describe("generateArtifacts", () => {
     removeTempDir(tempDir);
   });
 
-  it("generates CLAUDE.md artifact", () => {
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd).toBeDefined();
-    expect(claudeMd?.path).toBe(".claude/CLAUDE.md");
-    expect(claudeMd?.content).toContain("# ");
-  });
-
-  it("generates CLAUDE.md with quality gates", () => {
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("## Quality Gates");
-    expect(claudeMd?.content).toContain("Lines per function");
-    expect(claudeMd?.content).toContain("20 max");
-    expect(claudeMd?.content).toContain("/code-review");
-  });
-
   it("generates settings.json artifact", () => {
     const info = analyzeRepository(tempDir);
     const result = generateArtifacts(info);
@@ -1238,75 +1221,6 @@ dependencies { implementation("androidx.compose.ui:ui") }`
     expect(composeSkill?.content).toContain("ViewModel");
   });
 
-  // Common commands tests for different package managers
-  it("CLAUDE.md contains pnpm commands for pnpm projects", () => {
-    fs.writeFileSync(path.join(tempDir, "pnpm-lock.yaml"), "lockfileVersion: 6.0");
-    fs.writeFileSync(path.join(tempDir, "package.json"), '{"name": "test"}');
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("pnpm install");
-    expect(claudeMd?.content).toContain("pnpm dev");
-  });
-
-  it("CLAUDE.md contains yarn commands for yarn projects", () => {
-    fs.writeFileSync(path.join(tempDir, "yarn.lock"), "");
-    fs.writeFileSync(path.join(tempDir, "package.json"), '{"name": "test"}');
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("yarn");
-    expect(claudeMd?.content).toContain("yarn dev");
-  });
-
-  it("CLAUDE.md contains npm commands for npm projects", () => {
-    fs.writeFileSync(path.join(tempDir, "package-lock.json"), "{}");
-    fs.writeFileSync(path.join(tempDir, "package.json"), '{"name": "test"}');
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("npm install");
-    expect(claudeMd?.content).toContain("npm run dev");
-  });
-
-  it("CLAUDE.md contains pip commands for Python projects", () => {
-    fs.writeFileSync(path.join(tempDir, "requirements.txt"), "flask");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("pip install");
-    expect(claudeMd?.content).toContain("pytest");
-  });
-
-  it("CLAUDE.md contains poetry commands for Poetry projects", () => {
-    fs.writeFileSync(path.join(tempDir, "poetry.lock"), "");
-    fs.writeFileSync(path.join(tempDir, "pyproject.toml"), "[tool.poetry]");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("poetry install");
-  });
-
-  it("CLAUDE.md contains cargo commands for Rust projects", () => {
-    fs.writeFileSync(path.join(tempDir, "Cargo.toml"), '[package]\nname = "test"');
-    fs.writeFileSync(path.join(tempDir, "Cargo.lock"), ""); // Need lock file for pkg manager detection
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("cargo build");
-    expect(claudeMd?.content).toContain("cargo test");
-  });
-
-  it("CLAUDE.md contains go commands for Go projects", () => {
-    fs.writeFileSync(path.join(tempDir, "go.mod"), "module test");
-    fs.writeFileSync(path.join(tempDir, "go.sum"), ""); // Need sum file for pkg manager detection
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("go test");
-    expect(claudeMd?.content).toContain("go build");
-  });
-
   // Additional framework skill tests
   it("generates NestJS skill for NestJS projects", () => {
     fs.writeFileSync(
@@ -1328,42 +1242,6 @@ dependencies { implementation("androidx.compose.ui:ui") }`
     const result = generateArtifacts(info);
     const skills = result.artifacts.filter((a) => a.type === "skill");
     expect(skills.map((s) => s.path)).toContain(".claude/skills/react-components.md");
-  });
-
-  // Linter command tests
-  it("CLAUDE.md contains eslint commands with npx for non-bun projects", () => {
-    fs.writeFileSync(path.join(tempDir, "package-lock.json"), "{}");
-    fs.writeFileSync(
-      path.join(tempDir, "package.json"),
-      JSON.stringify({ devDependencies: { eslint: "8.0.0" } })
-    );
-    fs.writeFileSync(path.join(tempDir, "eslint.config.js"), "export default {}");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("npx eslint");
-  });
-
-  it("CLAUDE.md contains biome commands for biome projects", () => {
-    fs.writeFileSync(path.join(tempDir, "bun.lock"), "");
-    fs.writeFileSync(
-      path.join(tempDir, "package.json"),
-      JSON.stringify({ devDependencies: { "@biomejs/biome": "1.0.0" } })
-    );
-    fs.writeFileSync(path.join(tempDir, "biome.json"), "{}");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("biome check");
-  });
-
-  it("CLAUDE.md contains ruff commands for Python projects with ruff", () => {
-    fs.writeFileSync(path.join(tempDir, "requirements.txt"), "ruff");
-    fs.writeFileSync(path.join(tempDir, "ruff.toml"), "");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const claudeMd = result.artifacts.find((a) => a.type === "claude-md");
-    expect(claudeMd?.content).toContain("ruff check");
   });
 
   // Settings permissions tests
@@ -1466,15 +1344,15 @@ describe("writeArtifacts", () => {
 
   it("overwrites with force flag", () => {
     // Create existing file
-    const filePath = path.join(tempDir, ".claude", "CLAUDE.md");
+    const filePath = path.join(tempDir, ".claude", "skills", "test.md");
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, "# Old");
 
     const artifacts = [
-      { type: "claude-md" as const, path: ".claude/CLAUDE.md", content: "# New", isNew: false },
+      { type: "skill" as const, path: ".claude/skills/test.md", content: "# New", isNew: false },
     ];
     const result = writeArtifacts(artifacts, tempDir, true);
-    expect(result.updated).toContain(".claude/CLAUDE.md");
+    expect(result.updated).toContain(".claude/skills/test.md");
     expect(fs.readFileSync(filePath, "utf-8")).toBe("# New");
   });
 
@@ -1491,5 +1369,65 @@ describe("writeArtifacts", () => {
     expect(
       fs.existsSync(path.join(tempDir, ".claude", "skills", "deep", "nested", "skill.md"))
     ).toBe(true);
+  });
+});
+
+// ============================================================================
+// Claude CLI Integration Tests
+// ============================================================================
+
+describe("checkClaudeCli", () => {
+  it("returns a boolean", () => {
+    const result = checkClaudeCli();
+    expect(typeof result).toBe("boolean");
+  });
+});
+
+describe("parseArgs - no static flag", () => {
+  it("does not have a static property", () => {
+    const args = parseArgs([]);
+    expect("static" in args).toBe(false);
+  });
+});
+
+// ============================================================================
+// Analysis Prompt Tests
+// ============================================================================
+
+describe("getAnalysisPrompt", () => {
+  it("returns a string containing the project name and tech stack context", () => {
+    const projectInfo = {
+      isExisting: true,
+      fileCount: 10,
+      techStack: {
+        languages: ["typescript" as const],
+        primaryLanguage: "typescript" as const,
+        frameworks: ["nextjs" as const],
+        primaryFramework: "nextjs" as const,
+        packageManager: "bun" as const,
+        testingFramework: "vitest" as const,
+        linter: "biome" as const,
+        formatter: "biome" as const,
+        bundler: "tsup" as const,
+        isMonorepo: false,
+        hasDocker: false,
+        hasCICD: false,
+        cicdPlatform: null,
+        hasClaudeConfig: false,
+        existingClaudeFiles: [],
+      },
+      rootDir: "/tmp/test",
+      name: "my-test-project",
+      description: "A test project for analysis",
+    };
+
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(typeof prompt).toBe("string");
+    expect(prompt).toContain("my-test-project");
+    expect(prompt).toContain("typescript");
+    expect(prompt).toContain("nextjs");
+    expect(prompt).toContain("A test project for analysis");
+    expect(prompt).toContain("Phase 1");
+    expect(prompt).toContain("CLAUDE.md");
   });
 });

@@ -23,8 +23,8 @@ export interface Args {
   help: boolean;
   version: boolean;
   force: boolean;
-  interactive: boolean; // New: enable/disable interactive mode
-  verbose: boolean; // New: show detailed output
+  interactive: boolean;
+  verbose: boolean;
 }
 
 /**
@@ -243,7 +243,7 @@ export interface NewProjectPreferences {
  * Generated artifact
  */
 export interface GeneratedArtifact {
-  type: "skill" | "agent" | "rule" | "command" | "claude-md" | "settings";
+  type: "skill" | "agent" | "rule" | "command" | "settings";
   path: string;
   content: string;
   isNew: boolean; // true if creating new, false if merging
