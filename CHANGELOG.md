@@ -1,3 +1,9 @@
+## [0.8.0](https://github.com/cassmtnr/claude-code-starter/compare/0.7.0...0.8.0) (2026-02-14)
+
+### Features
+
+* enhance CLAUDE.md generation with Claude CLI deep analysis and remove static generation ([a95781f](https://github.com/cassmtnr/claude-code-starter/commit/a95781f7e2d14982f6dff2172dd7d339d34526c3))
+
 ## [0.7.0](https://github.com/cassmtnr/claude-code-starter/compare/0.6.0...0.7.0) (2026-02-14)
 
 ### Features
