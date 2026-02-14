@@ -1,3 +1,9 @@
+## [0.6.0](https://github.com/cassmtnr/claude-code-starter/compare/0.5.0...0.6.0) (2026-02-14)
+
+### Features
+
+* Integrate Claude CLI for deep project analysis and generate CLAUDE.md ([3d995cd](https://github.com/cassmtnr/claude-code-starter/commit/3d995cd7934264a842af17a008c255fb0b4a9b9e))
+
 ## [0.4.0](https://github.com/cassmtnr/claude-code-starter/compare/0.3.0...0.4.0) (2026-02-04)
 
 ### Features
