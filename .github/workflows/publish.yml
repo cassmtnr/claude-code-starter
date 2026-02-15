@@ -42,8 +42,11 @@ jobs:
       - name: Build
         run: bun run build
 
-      - name: Test
+      - name: Run unit tests
         run: bun test
+
+      - name: Run E2E tests
+        run: bun test src/cli.e2e.test.ts
 
       - name: Publish
         run: npm publish
