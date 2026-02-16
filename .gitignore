@@ -20,6 +20,7 @@ coverage/
 .agent/
 .ralph/
 ralph.yml
+PROMPT.md
 .claude/.version
 .claude/settings.local.json
 .claude/state/
