@@ -1,3 +1,9 @@
+## [0.12.0](https://github.com/cassmtnr/claude-code-starter/compare/0.11.0...0.12.0) (2026-02-16)
+
+### Features
+
+* Revamp architecture documentation for clarity and detail ([069b3f2](https://github.com/cassmtnr/claude-code-starter/commit/069b3f2d74f2e87353abd3e74de73bd54a287d1d))
+
 ## [0.11.0](https://github.com/cassmtnr/claude-code-starter/compare/0.10.0...0.11.0) (2026-02-16)
 
 ### Features
