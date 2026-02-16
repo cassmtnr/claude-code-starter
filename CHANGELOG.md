@@ -1,3 +1,9 @@
+## [0.10.0](https://github.com/cassmtnr/claude-code-starter/compare/0.9.0...0.10.0) (2026-02-16)
+
+### Features
+
+* update runClaudeAnalysis to use new permission flags and improve stdin handling ([6e71553](https://github.com/cassmtnr/claude-code-starter/commit/6e71553c63d326924d52fc368d27a7002a9bbc83))
+
 ## [0.9.0](https://github.com/cassmtnr/claude-code-starter/compare/0.8.0...0.9.0) (2026-02-16)
 
 ### Features
