@@ -383,19 +383,26 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
       "claude",
       [
         "-p",
-        prompt,
+        "--dangerously-skip-permissions",
         "--allowedTools",
         "Read",
+        "--allowedTools",
         "Glob",
+        "--allowedTools",
         "Grep",
-        `Write(.claude/**)`,
-        `Edit(.claude/**)`,
+        "--allowedTools",
+        "Write",
+        "--allowedTools",
+        "Edit",
       ],
       {
         cwd: projectDir,
-        stdio: ["ignore", "inherit", "inherit"],
+        stdio: ["pipe", "inherit", "inherit"],
       }
     );
+
+    child.stdin.write(prompt);
+    child.stdin.end();
 
     child.on("error", (err) => {
       console.error(pc.red(`Failed to launch Claude CLI: ${err.message}`));
