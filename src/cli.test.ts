@@ -15,7 +15,7 @@ import {
   showHelp,
   showTechStack,
 } from "./cli.js";
-import { generateArtifacts, writeArtifacts } from "./generator.js";
+import { ensureDirectories, generateSettings, writeSettings } from "./generator.js";
 import { getAnalysisPrompt } from "./prompt.js";
 
 // ============================================================================
@@ -146,6 +146,10 @@ describe("promptNewProject", () => {
           description: "Build an API",
           primaryLanguage: "typescript",
           framework: "nextjs",
+          packageManager: "bun",
+          testingFramework: "vitest",
+          linter: "biome",
+          projectType: "Web App",
         }),
       };
     });
@@ -199,6 +203,10 @@ describe("promptNewProject", () => {
           description: "My project",
           primaryLanguage: null, // No language selected
           framework: null,
+          packageManager: null,
+          testingFramework: null,
+          linter: null,
+          projectType: "Other",
         }),
       };
     });
@@ -225,6 +233,10 @@ describe("promptNewProject", () => {
           description: "Python API",
           primaryLanguage: "python",
           framework: "fastapi",
+          packageManager: "pip",
+          testingFramework: "pytest",
+          linter: "ruff",
+          projectType: "API/Backend",
         }),
       };
     });
@@ -361,9 +373,6 @@ describe("formatFramework", () => {
 // ============================================================================
 
 describe("showTechStack", () => {
-  // These tests verify that showTechStack doesn't throw with various inputs
-  // and exercises different code paths
-
   it("handles basic tech stack without errors", () => {
     const projectInfo = {
       isExisting: true,
@@ -390,7 +399,6 @@ describe("showTechStack", () => {
       description: null,
     };
 
-    // Should not throw
     expect(() => showTechStack(projectInfo, false)).not.toThrow();
   });
 
@@ -420,7 +428,6 @@ describe("showTechStack", () => {
       description: "A project with everything",
     };
 
-    // Should not throw - exercises verbose code paths
     expect(() => showTechStack(projectInfo, true)).not.toThrow();
   });
 
@@ -598,6 +605,11 @@ describe("createTaskFile", () => {
       framework: "fastapi" as const,
       includeTests: true,
       includeLinting: true,
+      packageManager: null,
+      testingFramework: null,
+      linter: null,
+      formatter: null,
+      projectType: "API/Backend",
     };
 
     createTaskFile(projectInfo, preferences);
@@ -734,7 +746,6 @@ describe("detectTechStack", () => {
     expect(stack.languages).toContain("rust");
   });
 
-  // Swift language detection
   it("detects Swift from Package.swift", () => {
     fs.writeFileSync(path.join(tempDir, "Package.swift"), "import PackageDescription");
     const stack = detectTechStack(tempDir);
@@ -747,7 +758,6 @@ describe("detectTechStack", () => {
     expect(stack.languages).toContain("swift");
   });
 
-  // Kotlin language detection
   it("detects Kotlin from .kt files", () => {
     fs.writeFileSync(path.join(tempDir, "Main.kt"), "fun main() {}");
     const stack = detectTechStack(tempDir);
@@ -785,16 +795,13 @@ describe("detectTechStack", () => {
     expect(stack.frameworks).toContain("fastapi");
   });
 
-  // Swift/iOS framework detection
   it("detects SwiftUI framework from ContentView file", () => {
-    // Create a .swift file in root to trigger iOS detection
     fs.writeFileSync(path.join(tempDir, "ContentView.swift"), "import SwiftUI");
     const stack = detectTechStack(tempDir);
     expect(stack.frameworks).toContain("swiftui");
   });
 
   it("detects UIKit framework from ViewController file", () => {
-    // Create a ViewController file to trigger UIKit detection
     fs.writeFileSync(path.join(tempDir, "MainViewController.swift"), "import UIKit");
     const stack = detectTechStack(tempDir);
     expect(stack.frameworks).toContain("uikit");
@@ -809,7 +816,6 @@ describe("detectTechStack", () => {
     expect(stack.frameworks).toContain("vapor");
   });
 
-  // Android/Kotlin framework detection
   it("detects Jetpack Compose from build.gradle.kts", () => {
     fs.writeFileSync(
       path.join(tempDir, "build.gradle.kts"),
@@ -959,7 +965,6 @@ describe("summarizeTechStack", () => {
     const tempDir = createTempDir();
     try {
       const stack = detectTechStack(tempDir);
-      // Create a minimal stack for testing
       const testStack = {
         ...stack,
         primaryLanguage: "typescript" as const,
@@ -1038,253 +1043,75 @@ describe("analyzeRepository", () => {
     fs.writeFileSync(path.join(tempDir, "package.json"), '{"name": "test"}');
 
     const info = analyzeRepository(tempDir);
-    // Should only count src/index.ts, not ignored files
     expect(info.fileCount).toBe(1);
   });
 });
 
 // ============================================================================
-// Artifact Generation Tests
+// Generator Tests (settings, directories)
 // ============================================================================
 
-describe("generateArtifacts", () => {
-  let tempDir: string;
-
-  beforeEach(() => {
-    tempDir = createTempDir();
+describe("generateSettings", () => {
+  it("generates settings with basic permissions", () => {
+    const stack = detectTechStack(createTempDir());
+    const result = generateSettings(stack);
+    expect(result.path).toBe(".claude/settings.json");
+    expect(result.content).toContain("permissions");
+    expect(result.content).toContain("Read(**)");
   });
 
-  afterEach(() => {
-    removeTempDir(tempDir);
+  it("includes Python permissions for Python projects", () => {
+    const tempDir = createTempDir();
+    try {
+      fs.writeFileSync(path.join(tempDir, "requirements.txt"), "fastapi");
+      const stack = detectTechStack(tempDir);
+      const result = generateSettings(stack);
+      expect(result.content).toContain("python");
+      expect(result.content).toContain("pytest");
+    } finally {
+      removeTempDir(tempDir);
+    }
   });
 
-  it("generates settings.json artifact", () => {
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const settings = result.artifacts.find((a) => a.type === "settings");
-    expect(settings).toBeDefined();
-    expect(settings?.path).toBe(".claude/settings.json");
-    expect(settings?.content).toContain("permissions");
+  it("includes Go permissions for Go projects", () => {
+    const tempDir = createTempDir();
+    try {
+      fs.writeFileSync(path.join(tempDir, "go.mod"), "module test");
+      const stack = detectTechStack(tempDir);
+      const result = generateSettings(stack);
+      expect(result.content).toContain("Bash(go:*)");
+    } finally {
+      removeTempDir(tempDir);
+    }
   });
 
-  it("generates universal skills", () => {
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    // 8 core skills: 3 methodology + 5 process discipline
-    expect(skills.length).toBeGreaterThanOrEqual(8);
-    // Methodology skills
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/pattern-discovery.md");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/systematic-debugging.md");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/testing-methodology.md");
-    // Process discipline skills
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/iterative-development.md");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/commit-hygiene.md");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/code-deduplication.md");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/simplicity-rules.md");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/security.md");
+  it("includes Rust permissions for Rust projects", () => {
+    const tempDir = createTempDir();
+    try {
+      fs.writeFileSync(path.join(tempDir, "Cargo.toml"), '[package]\nname = "test"');
+      const stack = detectTechStack(tempDir);
+      const result = generateSettings(stack);
+      expect(result.content).toContain("cargo");
+      expect(result.content).toContain("rustc");
+    } finally {
+      removeTempDir(tempDir);
+    }
   });
 
-  it("generates agents", () => {
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const agents = result.artifacts.filter((a) => a.type === "agent");
-    expect(agents.length).toBeGreaterThanOrEqual(2);
-    expect(agents.map((a) => a.path)).toContain(".claude/agents/code-reviewer.md");
-    expect(agents.map((a) => a.path)).toContain(".claude/agents/test-writer.md");
-  });
-
-  it("generates commands", () => {
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const commands = result.artifacts.filter((a) => a.type === "command");
-    expect(commands.length).toBe(5);
-    expect(commands.map((c) => c.path)).toContain(".claude/commands/task.md");
-    expect(commands.map((c) => c.path)).toContain(".claude/commands/status.md");
-    expect(commands.map((c) => c.path)).toContain(".claude/commands/done.md");
-    expect(commands.map((c) => c.path)).toContain(".claude/commands/analyze.md");
-    expect(commands.map((c) => c.path)).toContain(".claude/commands/code-review.md");
-  });
-
-  it("generates Next.js skill for Next.js projects", () => {
-    fs.writeFileSync(
-      path.join(tempDir, "package.json"),
-      JSON.stringify({ dependencies: { next: "14.0.0" } })
-    );
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/nextjs-patterns.md");
-  });
-
-  it("generates FastAPI skill for FastAPI projects", () => {
-    fs.writeFileSync(path.join(tempDir, "requirements.txt"), "fastapi==0.100.0");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/fastapi-patterns.md");
-  });
-
-  it("generates TypeScript rules for TypeScript projects", () => {
-    fs.writeFileSync(path.join(tempDir, "tsconfig.json"), "{}");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const rules = result.artifacts.filter((a) => a.type === "rule");
-    expect(rules.map((r) => r.path)).toContain(".claude/rules/typescript.md");
-  });
-
-  it("generates Python rules for Python projects", () => {
-    fs.writeFileSync(path.join(tempDir, "requirements.txt"), "flask");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const rules = result.artifacts.filter((a) => a.type === "rule");
-    expect(rules.map((r) => r.path)).toContain(".claude/rules/python.md");
-  });
-
-  // Swift/iOS skill generation tests
-  it("generates SwiftUI skill for SwiftUI projects", () => {
-    fs.writeFileSync(path.join(tempDir, "ContentView.swift"), "import SwiftUI");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/swiftui-patterns.md");
-  });
-
-  it("generates UIKit skill for UIKit projects", () => {
-    fs.writeFileSync(path.join(tempDir, "MainViewController.swift"), "import UIKit");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/uikit-patterns.md");
-  });
-
-  it("generates Vapor skill for Vapor projects", () => {
-    fs.writeFileSync(
-      path.join(tempDir, "Package.swift"),
-      'import PackageDescription\nlet package = Package(dependencies: [.package(url: "vapor/vapor")])'
-    );
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/vapor-patterns.md");
-  });
-
-  // Android/Kotlin skill generation tests
-  it("generates Jetpack Compose skill for Compose projects", () => {
-    fs.writeFileSync(
-      path.join(tempDir, "build.gradle.kts"),
-      `plugins { id("com.android.application") }
-android { buildFeatures { compose = true } }
-dependencies { implementation("androidx.compose.ui:ui") }`
-    );
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/compose-patterns.md");
-  });
-
-  it("generates Android Views skill for Android projects without Compose", () => {
-    fs.writeFileSync(
-      path.join(tempDir, "build.gradle"),
-      `plugins { id 'com.android.application' }
-android { compileSdk 34 }`
-    );
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/android-views-patterns.md");
-  });
-
-  it("SwiftUI skill contains essential patterns", () => {
-    fs.writeFileSync(path.join(tempDir, "ContentView.swift"), "import SwiftUI");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const swiftuiSkill = result.artifacts.find((a) => a.path.includes("swiftui-patterns"));
-    expect(swiftuiSkill).toBeDefined();
-    expect(swiftuiSkill?.content).toContain("@State");
-    expect(swiftuiSkill?.content).toContain("@StateObject");
-    expect(swiftuiSkill?.content).toContain("MVVM");
-  });
-
-  it("Jetpack Compose skill contains essential patterns", () => {
-    fs.writeFileSync(
-      path.join(tempDir, "build.gradle.kts"),
-      `plugins { id("com.android.application") }
-android { buildFeatures { compose = true } }
-dependencies { implementation("androidx.compose.ui:ui") }`
-    );
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const composeSkill = result.artifacts.find((a) => a.path.includes("compose-patterns"));
-    expect(composeSkill?.content).toContain("@Composable");
-    expect(composeSkill?.content).toContain("remember");
-    expect(composeSkill?.content).toContain("ViewModel");
-  });
-
-  // Additional framework skill tests
-  it("generates NestJS skill for NestJS projects", () => {
-    fs.writeFileSync(
-      path.join(tempDir, "package.json"),
-      JSON.stringify({ dependencies: { "@nestjs/core": "10.0.0" } })
-    );
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/nestjs-patterns.md");
-  });
-
-  it("generates React skill for standalone React projects", () => {
-    fs.writeFileSync(
-      path.join(tempDir, "package.json"),
-      JSON.stringify({ dependencies: { react: "18.0.0" } })
-    );
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const skills = result.artifacts.filter((a) => a.type === "skill");
-    expect(skills.map((s) => s.path)).toContain(".claude/skills/react-components.md");
-  });
-
-  // Settings permissions tests
-  it("settings.json contains Python permissions for Python projects", () => {
-    fs.writeFileSync(path.join(tempDir, "requirements.txt"), "fastapi");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const settings = result.artifacts.find((a) => a.type === "settings");
-    expect(settings?.content).toContain("python");
-    expect(settings?.content).toContain("pytest");
-  });
-
-  it("settings.json contains Go permissions for Go projects", () => {
-    fs.writeFileSync(path.join(tempDir, "go.mod"), "module test");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const settings = result.artifacts.find((a) => a.type === "settings");
-    expect(settings?.content).toContain("Bash(go:*)");
-  });
-
-  it("settings.json contains Rust permissions for Rust projects", () => {
-    fs.writeFileSync(path.join(tempDir, "Cargo.toml"), '[package]\nname = "test"');
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const settings = result.artifacts.find((a) => a.type === "settings");
-    expect(settings?.content).toContain("cargo");
-    expect(settings?.content).toContain("rustc");
-  });
-
-  it("settings.json contains Docker permissions when Docker is present", () => {
-    fs.writeFileSync(path.join(tempDir, "Dockerfile"), "FROM node:18");
-    const info = analyzeRepository(tempDir);
-    const result = generateArtifacts(info);
-    const settings = result.artifacts.find((a) => a.type === "settings");
-    expect(settings?.content).toContain("docker");
+  it("includes Docker permissions when Docker is present", () => {
+    const tempDir = createTempDir();
+    try {
+      fs.writeFileSync(path.join(tempDir, "Dockerfile"), "FROM node:18");
+      const stack = detectTechStack(tempDir);
+      const result = generateSettings(stack);
+      expect(result.content).toContain("docker");
+    } finally {
+      removeTempDir(tempDir);
+    }
   });
 });
 
-// ============================================================================
-// Artifact Writing Tests
-// ============================================================================
-
-describe("writeArtifacts", () => {
+describe("ensureDirectories", () => {
   let tempDir: string;
 
   beforeEach(() => {
@@ -1295,80 +1122,45 @@ describe("writeArtifacts", () => {
     removeTempDir(tempDir);
   });
 
-  it("creates new files", () => {
-    const artifacts = [
-      { type: "skill" as const, path: ".claude/skills/test.md", content: "# Test", isNew: true },
-    ];
-    const result = writeArtifacts(artifacts, tempDir, false);
-    expect(result.created).toContain(".claude/skills/test.md");
-    expect(fs.existsSync(path.join(tempDir, ".claude", "skills", "test.md"))).toBe(true);
+  it("creates all required .claude/ subdirectories", () => {
+    ensureDirectories(tempDir);
+
+    expect(fs.existsSync(path.join(tempDir, ".claude"))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, ".claude", "skills"))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, ".claude", "agents"))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, ".claude", "rules"))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, ".claude", "commands"))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, ".claude", "state"))).toBe(true);
   });
 
-  it("updates existing files", () => {
-    // Create existing file
-    const filePath = path.join(tempDir, ".claude", "skills", "test.md");
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, "# Old Content");
+  it("is idempotent — running twice doesn't error", () => {
+    ensureDirectories(tempDir);
+    expect(() => ensureDirectories(tempDir)).not.toThrow();
+  });
+});
 
-    const artifacts = [
-      {
-        type: "skill" as const,
-        path: ".claude/skills/test.md",
-        content: "# New Content",
-        isNew: false,
-      },
-    ];
-    const result = writeArtifacts(artifacts, tempDir, false);
-    expect(result.updated).toContain(".claude/skills/test.md");
-    expect(fs.readFileSync(filePath, "utf-8")).toBe("# New Content");
+describe("writeSettings", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
   });
 
-  it("skips task.md when not forced", () => {
-    // Create existing task file
-    const taskPath = path.join(tempDir, ".claude", "state", "task.md");
-    fs.mkdirSync(path.dirname(taskPath), { recursive: true });
-    fs.writeFileSync(taskPath, "# My Important Task");
-
-    const artifacts = [
-      {
-        type: "command" as const,
-        path: ".claude/state/task.md",
-        content: "# New Task",
-        isNew: false,
-      },
-    ];
-    const result = writeArtifacts(artifacts, tempDir, false);
-    expect(result.skipped).toContain(".claude/state/task.md");
-    expect(fs.readFileSync(taskPath, "utf-8")).toBe("# My Important Task");
+  afterEach(() => {
+    removeTempDir(tempDir);
   });
 
-  it("overwrites with force flag", () => {
-    // Create existing file
-    const filePath = path.join(tempDir, ".claude", "skills", "test.md");
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, "# Old");
+  it("writes settings.json to .claude/ directory", () => {
+    const stack = detectTechStack(tempDir);
+    writeSettings(tempDir, stack);
 
-    const artifacts = [
-      { type: "skill" as const, path: ".claude/skills/test.md", content: "# New", isNew: false },
-    ];
-    const result = writeArtifacts(artifacts, tempDir, true);
-    expect(result.updated).toContain(".claude/skills/test.md");
-    expect(fs.readFileSync(filePath, "utf-8")).toBe("# New");
-  });
+    const settingsPath = path.join(tempDir, ".claude", "settings.json");
+    expect(fs.existsSync(settingsPath)).toBe(true);
 
-  it("creates nested directory structure", () => {
-    const artifacts = [
-      {
-        type: "skill" as const,
-        path: ".claude/skills/deep/nested/skill.md",
-        content: "# Deep",
-        isNew: true,
-      },
-    ];
-    writeArtifacts(artifacts, tempDir, false);
-    expect(
-      fs.existsSync(path.join(tempDir, ".claude", "skills", "deep", "nested", "skill.md"))
-    ).toBe(true);
+    const content = fs.readFileSync(settingsPath, "utf-8");
+    const parsed = JSON.parse(content);
+    expect(parsed.permissions).toBeDefined();
+    expect(parsed.permissions.allow).toBeInstanceOf(Array);
   });
 });
 
@@ -1395,32 +1187,32 @@ describe("parseArgs - no static flag", () => {
 // ============================================================================
 
 describe("getAnalysisPrompt", () => {
-  it("returns a string containing the project name and tech stack context", () => {
-    const projectInfo = {
-      isExisting: true,
-      fileCount: 10,
-      techStack: {
-        languages: ["typescript" as const],
-        primaryLanguage: "typescript" as const,
-        frameworks: ["nextjs" as const],
-        primaryFramework: "nextjs" as const,
-        packageManager: "bun" as const,
-        testingFramework: "vitest" as const,
-        linter: "biome" as const,
-        formatter: "biome" as const,
-        bundler: "tsup" as const,
-        isMonorepo: false,
-        hasDocker: false,
-        hasCICD: false,
-        cicdPlatform: null,
-        hasClaudeConfig: false,
-        existingClaudeFiles: [],
-      },
-      rootDir: "/tmp/test",
-      name: "my-test-project",
-      description: "A test project for analysis",
-    };
+  const projectInfo = {
+    isExisting: true,
+    fileCount: 10,
+    techStack: {
+      languages: ["typescript" as const],
+      primaryLanguage: "typescript" as const,
+      frameworks: ["nextjs" as const],
+      primaryFramework: "nextjs" as const,
+      packageManager: "bun" as const,
+      testingFramework: "vitest" as const,
+      linter: "biome" as const,
+      formatter: "biome" as const,
+      bundler: "tsup" as const,
+      isMonorepo: false,
+      hasDocker: false,
+      hasCICD: false,
+      cicdPlatform: null,
+      hasClaudeConfig: false,
+      existingClaudeFiles: [],
+    },
+    rootDir: "/tmp/test",
+    name: "my-test-project",
+    description: "A test project for analysis",
+  };
 
+  it("returns a string containing the project name and tech stack context", () => {
     const prompt = getAnalysisPrompt(projectInfo);
     expect(typeof prompt).toBe("string");
     expect(prompt).toContain("my-test-project");
@@ -1429,5 +1221,81 @@ describe("getAnalysisPrompt", () => {
     expect(prompt).toContain("A test project for analysis");
     expect(prompt).toContain("Phase 1");
     expect(prompt).toContain("CLAUDE.md");
+  });
+
+  it("includes skills generation instructions", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Phase 4");
+    expect(prompt).toContain("pattern-discovery");
+    expect(prompt).toContain("systematic-debugging");
+    expect(prompt).toContain("testing-methodology");
+    expect(prompt).toContain("iterative-development");
+    expect(prompt).toContain("commit-hygiene");
+    expect(prompt).toContain("code-deduplication");
+    expect(prompt).toContain("simplicity-rules");
+    expect(prompt).toContain("security");
+  });
+
+  it("includes agents generation instructions", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Phase 5");
+    expect(prompt).toContain("code-reviewer");
+    expect(prompt).toContain("test-writer");
+  });
+
+  it("includes rules generation instructions", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Phase 6");
+    expect(prompt).toContain("code-style");
+    expect(prompt).toContain("typescript.md");
+    expect(prompt).toContain("python.md");
+  });
+
+  it("includes commands generation instructions", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Phase 7");
+    expect(prompt).toContain("task.md");
+    expect(prompt).toContain("status.md");
+    expect(prompt).toContain("done.md");
+    expect(prompt).toContain("analyze.md");
+    expect(prompt).toContain("code-review.md");
+  });
+
+  it("includes template variables", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("detected_testing_framework");
+    expect(prompt).toContain("vitest");
+    expect(prompt).toContain("test_command");
+    expect(prompt).toContain("lint_command");
+    expect(prompt).toContain("detected_languages");
+    expect(prompt).toContain("source_glob_patterns");
+  });
+
+  it("includes framework-specific skill instructions", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Next.js detected");
+    expect(prompt).toContain("nextjs-patterns");
+    expect(prompt).toContain("FastAPI detected");
+    expect(prompt).toContain("SwiftUI detected");
+  });
+
+  it("includes correct test command for bun projects", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    // vitest is detected, so the test command should be npx vitest
+    expect(prompt).toContain("npx vitest");
+  });
+
+  it("includes correct lint command for biome", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("npx biome check");
+  });
+
+  it("instructs Claude to write ALL files", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Execute Phase 4");
+    expect(prompt).toContain("Execute Phase 5");
+    expect(prompt).toContain("Execute Phase 6");
+    expect(prompt).toContain("Execute Phase 7");
+    expect(prompt).toContain("Write all files to disk using the Write tool");
   });
 });

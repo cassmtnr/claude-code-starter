@@ -6,8 +6,8 @@
  * 1. Parse command-line arguments
  * 2. Analyze the repository (via analyzer module)
  * 3. Prompt for preferences (new projects only)
- * 4. Generate artifacts (via generator module)
- * 5. Write artifacts to disk
+ * 4. Write settings.json and ensure directories
+ * 5. Spawn Claude CLI to generate all .claude/ content files
  * 6. Display summary
  *
  * CLI Options:
@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 import pc from "picocolors";
 import prompts from "prompts";
 import { analyzeRepository, summarizeTechStack } from "./analyzer.js";
-import { generateArtifacts, writeArtifacts } from "./generator.js";
+import { ensureDirectories, writeSettings } from "./generator.js";
 import { getAnalysisPrompt } from "./prompt.js";
 import type { Args, Framework, Language, NewProjectPreferences, ProjectInfo } from "./types.js";
 
@@ -84,11 +84,12 @@ ${pc.bold("OPTIONS")}
 ${pc.bold("WHAT IT DOES")}
   1. Analyzes your repository's tech stack
   2. Launches Claude CLI to deeply analyze your codebase
-  3. Generates tailored Claude Code configurations:
+  3. Generates all .claude/ configuration files:
      - CLAUDE.md with project-specific instructions (via Claude analysis)
-     - Skills for your frameworks (Next.js, FastAPI, etc.)
+     - Skills for your frameworks and workflows
      - Agents for code review and testing
      - Rules matching your code style
+     - Commands for task management
 
 ${pc.bold("REQUIREMENTS")}
   Claude CLI must be installed: https://claude.ai/download
@@ -151,6 +152,79 @@ export function showTechStack(projectInfo: ProjectInfo, verbose: boolean): void 
   console.log();
 }
 
+// ============================================================================
+// New Project Questionnaire
+// ============================================================================
+
+const frameworkChoices: Record<string, { title: string; value: Framework | null }[]> = {
+  typescript: [
+    { title: "Next.js", value: "nextjs" },
+    { title: "React", value: "react" },
+    { title: "Vue", value: "vue" },
+    { title: "Svelte", value: "svelte" },
+    { title: "Express", value: "express" },
+    { title: "NestJS", value: "nestjs" },
+    { title: "Fastify", value: "fastify" },
+    { title: "Hono", value: "hono" },
+    { title: "Astro", value: "astro" },
+    { title: "None / Other", value: null },
+  ],
+  javascript: [
+    { title: "Next.js", value: "nextjs" },
+    { title: "React", value: "react" },
+    { title: "Vue", value: "vue" },
+    { title: "Svelte", value: "svelte" },
+    { title: "Express", value: "express" },
+    { title: "NestJS", value: "nestjs" },
+    { title: "Fastify", value: "fastify" },
+    { title: "Hono", value: "hono" },
+    { title: "Astro", value: "astro" },
+    { title: "None / Other", value: null },
+  ],
+  python: [
+    { title: "FastAPI", value: "fastapi" },
+    { title: "Django", value: "django" },
+    { title: "Flask", value: "flask" },
+    { title: "None / Other", value: null },
+  ],
+  go: [
+    { title: "Gin", value: "gin" },
+    { title: "Echo", value: "echo" },
+    { title: "Fiber", value: "fiber" },
+    { title: "None / Other", value: null },
+  ],
+  swift: [
+    { title: "SwiftUI", value: "swiftui" },
+    { title: "UIKit", value: "uikit" },
+    { title: "Vapor", value: "vapor" },
+    { title: "None / Other", value: null },
+  ],
+  kotlin: [
+    { title: "Jetpack Compose", value: "jetpack-compose" },
+    { title: "Android Views", value: "android-views" },
+    { title: "Spring", value: "spring" },
+    { title: "None / Other", value: null },
+  ],
+  java: [
+    { title: "Spring", value: "spring" },
+    { title: "Quarkus", value: "quarkus" },
+    { title: "None / Other", value: null },
+  ],
+  ruby: [
+    { title: "Rails", value: "rails" },
+    { title: "Sinatra", value: "sinatra" },
+    { title: "None / Other", value: null },
+  ],
+  rust: [
+    { title: "Actix", value: "actix" },
+    { title: "Axum", value: "axum" },
+    { title: "Rocket", value: "rocket" },
+    { title: "None / Other", value: null },
+  ],
+};
+
+const defaultFrameworkChoices = [{ title: "None / Other", value: null as Framework | null }];
+
 export async function promptNewProject(args: Args): Promise<NewProjectPreferences | null> {
   if (!args.interactive) {
     return null;
@@ -159,65 +233,221 @@ export async function promptNewProject(args: Args): Promise<NewProjectPreference
   console.log(pc.yellow("New project detected - let's set it up!"));
   console.log();
 
-  const response = await prompts([
-    {
-      type: "text",
-      name: "description",
-      message: "What are you building?",
-      initial: "A new project",
-    },
-    {
-      type: "select",
-      name: "primaryLanguage",
-      message: "Primary language?",
-      choices: [
-        { title: "TypeScript", value: "typescript" },
-        { title: "JavaScript", value: "javascript" },
-        { title: "Python", value: "python" },
-        { title: "Go", value: "go" },
-        { title: "Rust", value: "rust" },
-        { title: "Other", value: null },
-      ],
-    },
-    {
-      type: (prev) => (prev === "typescript" || prev === "javascript" ? "select" : null),
-      name: "framework",
-      message: "Framework?",
-      choices: [
-        { title: "Next.js", value: "nextjs" },
-        { title: "React", value: "react" },
-        { title: "Vue", value: "vue" },
-        { title: "Svelte", value: "svelte" },
-        { title: "Express", value: "express" },
-        { title: "NestJS", value: "nestjs" },
-        { title: "Hono", value: "hono" },
-        { title: "None / Other", value: null },
-      ],
-    },
-    {
-      type: (_, values) => (values.primaryLanguage === "python" ? "select" : null),
-      name: "framework",
-      message: "Framework?",
-      choices: [
-        { title: "FastAPI", value: "fastapi" },
-        { title: "Django", value: "django" },
-        { title: "Flask", value: "flask" },
-        { title: "None / Other", value: null },
-      ],
-    },
-  ]);
+  // Question 1: Project description
+  const descResponse = await prompts({
+    type: "text",
+    name: "description",
+    message: "What are you building?",
+    initial: "A new project",
+  });
 
-  if (!response.description) {
+  if (!descResponse.description) {
     return null; // User cancelled
   }
 
+  // Question 2: Primary language
+  const langResponse = await prompts({
+    type: "select",
+    name: "primaryLanguage",
+    message: "Primary language?",
+    choices: [
+      { title: "TypeScript", value: "typescript" },
+      { title: "JavaScript", value: "javascript" },
+      { title: "Python", value: "python" },
+      { title: "Go", value: "go" },
+      { title: "Rust", value: "rust" },
+      { title: "Swift", value: "swift" },
+      { title: "Kotlin", value: "kotlin" },
+      { title: "Java", value: "java" },
+      { title: "Ruby", value: "ruby" },
+      { title: "C#", value: "csharp" },
+      { title: "PHP", value: "php" },
+      { title: "C++", value: "cpp" },
+    ],
+  });
+
+  const lang: string = langResponse.primaryLanguage || "typescript";
+
+  // Question 3: Framework (filtered by language)
+  const fwChoices = frameworkChoices[lang] || defaultFrameworkChoices;
+  const fwResponse = await prompts({
+    type: "select",
+    name: "framework",
+    message: "Framework?",
+    choices: fwChoices,
+  });
+
+  // Question 4: Package manager (filtered by language)
+  const pmChoices = getPackageManagerChoices(lang);
+  const pmResponse = await prompts({
+    type: "select",
+    name: "packageManager",
+    message: "Package manager?",
+    choices: pmChoices,
+  });
+
+  // Question 5: Testing framework (filtered by language)
+  const testChoices = getTestingFrameworkChoices(lang);
+  const testResponse = await prompts({
+    type: "select",
+    name: "testingFramework",
+    message: "Testing framework?",
+    choices: testChoices,
+  });
+
+  // Question 6: Linter/Formatter (filtered by language)
+  const lintChoices = getLinterFormatterChoices(lang);
+  const lintResponse = await prompts({
+    type: "select",
+    name: "linter",
+    message: "Linter/Formatter?",
+    choices: lintChoices,
+  });
+
+  // Question 7: Project type
+  const typeResponse = await prompts({
+    type: "select",
+    name: "projectType",
+    message: "Project type?",
+    choices: [
+      { title: "Web App", value: "Web App" },
+      { title: "API / Backend", value: "API/Backend" },
+      { title: "CLI Tool", value: "CLI Tool" },
+      { title: "Library / Package", value: "Library/Package" },
+      { title: "Mobile App", value: "Mobile App" },
+      { title: "Desktop App", value: "Desktop App" },
+      { title: "Monorepo", value: "Monorepo" },
+      { title: "Other", value: "Other" },
+    ],
+  });
+
   return {
-    description: response.description,
-    primaryLanguage: response.primaryLanguage || "typescript",
-    framework: response.framework || null,
+    description: descResponse.description,
+    primaryLanguage: (langResponse.primaryLanguage || "typescript") as Language,
+    framework: fwResponse.framework || null,
     includeTests: true,
     includeLinting: true,
+    packageManager: pmResponse.packageManager || null,
+    testingFramework: testResponse.testingFramework || null,
+    linter: lintResponse.linter || null,
+    formatter: lintResponse.linter || null, // Use same as linter for simplicity
+    projectType: typeResponse.projectType || "Other",
   };
+}
+
+function getPackageManagerChoices(lang: string) {
+  if (lang === "typescript" || lang === "javascript") {
+    return [
+      { title: "npm", value: "npm" },
+      { title: "yarn", value: "yarn" },
+      { title: "pnpm", value: "pnpm" },
+      { title: "bun", value: "bun" },
+    ];
+  }
+  if (lang === "python") {
+    return [
+      { title: "pip", value: "pip" },
+      { title: "poetry", value: "poetry" },
+    ];
+  }
+  if (lang === "rust") {
+    return [{ title: "cargo", value: "cargo" }];
+  }
+  if (lang === "go") {
+    return [{ title: "go modules", value: "go" }];
+  }
+  if (lang === "ruby") {
+    return [{ title: "bundler", value: "bundler" }];
+  }
+  if (lang === "java" || lang === "kotlin") {
+    return [
+      { title: "Maven", value: "maven" },
+      { title: "Gradle", value: "gradle" },
+    ];
+  }
+  return [{ title: "None / Default", value: null }];
+}
+
+function getTestingFrameworkChoices(lang: string) {
+  if (lang === "typescript" || lang === "javascript") {
+    return [
+      { title: "Vitest", value: "vitest" },
+      { title: "Jest", value: "jest" },
+      { title: "Bun Test", value: "bun-test" },
+      { title: "Playwright", value: "playwright" },
+      { title: "None / I'll set it up later", value: null },
+    ];
+  }
+  if (lang === "python") {
+    return [
+      { title: "pytest", value: "pytest" },
+      { title: "unittest", value: "unittest" },
+      { title: "None / I'll set it up later", value: null },
+    ];
+  }
+  if (lang === "go") {
+    return [
+      { title: "go test", value: "go-test" },
+      { title: "None / I'll set it up later", value: null },
+    ];
+  }
+  if (lang === "rust") {
+    return [
+      { title: "cargo test", value: "rust-test" },
+      { title: "None / I'll set it up later", value: null },
+    ];
+  }
+  if (lang === "ruby") {
+    return [
+      { title: "RSpec", value: "rspec" },
+      { title: "None / I'll set it up later", value: null },
+    ];
+  }
+  if (lang === "java" || lang === "kotlin") {
+    return [
+      { title: "JUnit", value: "junit" },
+      { title: "None / I'll set it up later", value: null },
+    ];
+  }
+  return [{ title: "None / I'll set it up later", value: null }];
+}
+
+function getLinterFormatterChoices(lang: string) {
+  if (lang === "typescript" || lang === "javascript") {
+    return [
+      { title: "Biome", value: "biome" },
+      { title: "ESLint + Prettier", value: "eslint" },
+      { title: "ESLint", value: "eslint" },
+      { title: "None", value: null },
+    ];
+  }
+  if (lang === "python") {
+    return [
+      { title: "Ruff", value: "ruff" },
+      { title: "Flake8 + Black", value: "flake8" },
+      { title: "Pylint", value: "pylint" },
+      { title: "None", value: null },
+    ];
+  }
+  if (lang === "go") {
+    return [
+      { title: "golangci-lint", value: "golangci-lint" },
+      { title: "None", value: null },
+    ];
+  }
+  if (lang === "rust") {
+    return [
+      { title: "Clippy", value: "clippy" },
+      { title: "None", value: null },
+    ];
+  }
+  if (lang === "ruby") {
+    return [
+      { title: "RuboCop", value: "rubocop" },
+      { title: "None", value: null },
+    ];
+  }
+  return [{ title: "None", value: null }];
 }
 
 export function createTaskFile(
@@ -369,14 +599,16 @@ export function checkClaudeCli(): boolean {
 
 /**
  * Run Claude-powered deep project analysis.
- * Spawns the claude CLI with the analysis prompt to generate a professional CLAUDE.md.
+ * Spawns the claude CLI with the analysis prompt to generate all .claude/ content files.
  */
 export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo): Promise<boolean> {
   return new Promise((resolve) => {
     const prompt = getAnalysisPrompt(projectInfo);
 
     console.log(pc.cyan("Launching Claude for deep project analysis..."));
-    console.log(pc.gray("Claude will read your codebase and generate a comprehensive CLAUDE.md"));
+    console.log(
+      pc.gray("Claude will read your codebase and generate all .claude/ configuration files")
+    );
     console.log();
 
     const child = spawn(
@@ -422,6 +654,30 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
   });
 }
 
+/**
+ * Verify which .claude/ files were actually created by Claude.
+ */
+function getGeneratedFiles(projectDir: string): string[] {
+  const claudeDir = path.join(projectDir, ".claude");
+  const files: string[] = [];
+
+  function walk(dir: string): void {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else {
+        files.push(path.relative(projectDir, fullPath));
+      }
+    }
+  }
+
+  walk(claudeDir);
+  return files;
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -465,6 +721,18 @@ async function main(): Promise<void> {
         projectInfo.techStack.primaryFramework = preferences.framework;
         projectInfo.techStack.frameworks = [preferences.framework];
       }
+      if (preferences.packageManager) {
+        projectInfo.techStack.packageManager = preferences.packageManager;
+      }
+      if (preferences.testingFramework) {
+        projectInfo.techStack.testingFramework = preferences.testingFramework;
+      }
+      if (preferences.linter) {
+        projectInfo.techStack.linter = preferences.linter;
+      }
+      if (preferences.formatter) {
+        projectInfo.techStack.formatter = preferences.formatter;
+      }
       projectInfo.description = preferences.description;
     }
   } else {
@@ -500,41 +768,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Step 5: Generate supporting artifacts (skills, agents, rules, commands, settings)
-  console.log(pc.gray("Generating supporting configuration..."));
+  // Step 5: Write settings.json and ensure directories
+  console.log(pc.gray("Setting up .claude/ directory structure..."));
   console.log();
 
-  const result = generateArtifacts(projectInfo);
+  writeSettings(projectDir, projectInfo.techStack);
+  ensureDirectories(projectDir);
 
-  const { created, updated, skipped } = writeArtifacts(result.artifacts, projectDir, args.force);
-
-  if (created.length > 0) {
-    console.log(pc.green("Created:"));
-    for (const file of created) {
-      console.log(pc.green(`  + ${file}`));
-    }
-  }
-
-  if (updated.length > 0) {
-    console.log(pc.blue("Updated:"));
-    for (const file of updated) {
-      console.log(pc.blue(`  ~ ${file}`));
-    }
-  }
-
-  if (skipped.length > 0 && args.verbose) {
-    console.log(pc.gray("Preserved:"));
-    for (const file of skipped) {
-      console.log(pc.gray(`  - ${file}`));
-    }
-  }
-
+  console.log(pc.green("Created:"));
+  console.log(pc.green("  + .claude/settings.json"));
   console.log();
 
   // Step 6: Create task file
   createTaskFile(projectInfo, preferences);
 
-  // Step 7: Run Claude-powered deep analysis for CLAUDE.md
+  // Step 7: Run Claude-powered deep analysis for all .claude/ content files
   const success = await runClaudeAnalysis(projectDir, projectInfo);
 
   if (!success) {
@@ -543,49 +791,61 @@ async function main(): Promise<void> {
   }
 
   // Step 8: Show summary
-  const totalFiles = created.length + updated.length + 1;
+  const generatedFiles = getGeneratedFiles(projectDir);
   console.log();
-  console.log(pc.green(`Done! (${totalFiles} files)`));
+  console.log(pc.green(`Done! (${generatedFiles.length} files)`));
   console.log();
 
   console.log(pc.bold("Generated for your stack:"));
-  console.log(pc.cyan("  CLAUDE.md (deep analysis by Claude)"));
+  const skills = generatedFiles.filter((f) => f.includes("/skills/"));
+  const agents = generatedFiles.filter((f) => f.includes("/agents/"));
+  const rules = generatedFiles.filter((f) => f.includes("/rules/"));
+  const commands = generatedFiles.filter((f) => f.includes("/commands/"));
 
-  const skills = result.artifacts.filter((a) => a.type === "skill");
-  const agents = result.artifacts.filter((a) => a.type === "agent");
-  const rules = result.artifacts.filter((a) => a.type === "rule");
-
+  if (generatedFiles.some((f) => f.endsWith("CLAUDE.md"))) {
+    console.log(pc.cyan("  CLAUDE.md (deep analysis by Claude)"));
+  }
   if (skills.length > 0) {
     console.log(
-      `  ${skills.length} skills (${skills.map((s) => path.basename(s.path, ".md")).join(", ")})`
+      `  ${skills.length} skills (${skills.map((s) => path.basename(s, ".md")).join(", ")})`
     );
   }
   if (agents.length > 0) {
     console.log(
-      `  ${agents.length} agents (${agents.map((a) => path.basename(a.path, ".md")).join(", ")})`
+      `  ${agents.length} agents (${agents.map((a) => path.basename(a, ".md")).join(", ")})`
     );
   }
   if (rules.length > 0) {
     console.log(`  ${rules.length} rules`);
+  }
+  if (commands.length > 0) {
+    console.log(`  ${commands.length} commands`);
   }
 
   console.log();
   console.log(`${pc.cyan("Next step:")} Run ${pc.bold("claude")} to start working!`);
   console.log();
   console.log(
-    pc.gray("Your CLAUDE.md was generated by deep analysis - review it with: cat .claude/CLAUDE.md")
+    pc.gray(
+      "Your .claude/ files were generated by deep analysis - review them with: ls -la .claude/"
+    )
   );
 }
 
 // Only run when executed directly, not when imported by tests
 // Use realpathSync to resolve symlinks (e.g., global npm installs link bin/ -> dist/cli.js)
-const isMain = fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) {
-  main().catch((err) => {
-    console.error(pc.red("Error:"), err.message);
-    if (process.env.DEBUG) {
-      console.error(err.stack);
-    }
-    process.exit(1);
-  });
+try {
+  const isMain =
+    process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+  if (isMain) {
+    main().catch((err) => {
+      console.error(pc.red("Error:"), err.message);
+      if (process.env.DEBUG) {
+        console.error(err.stack);
+      }
+      process.exit(1);
+    });
+  }
+} catch {
+  // Ignore errors from realpathSync (e.g., when argv[1] is undefined)
 }

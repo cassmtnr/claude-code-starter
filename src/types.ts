@@ -6,7 +6,6 @@
  * - CLI argument types
  * - Tech stack detection types (languages, frameworks, tools)
  * - Project analysis types
- * - Artifact generation types
  *
  * @example
  * import type { TechStack, ProjectInfo } from './types.js';
@@ -237,26 +236,9 @@ export interface NewProjectPreferences {
   framework: Framework | null;
   includeTests: boolean;
   includeLinting: boolean;
-}
-
-/**
- * Generated artifact
- */
-export interface GeneratedArtifact {
-  type: "skill" | "agent" | "rule" | "command" | "settings";
-  path: string;
-  content: string;
-  isNew: boolean; // true if creating new, false if merging
-}
-
-/**
- * Generation result
- */
-export interface GenerationResult {
-  artifacts: GeneratedArtifact[];
-  summary: {
-    created: number;
-    updated: number;
-    skipped: number;
-  };
+  packageManager: PackageManager | null;
+  testingFramework: TestingFramework | null;
+  linter: Linter | null;
+  formatter: Formatter | null;
+  projectType: string;
 }
