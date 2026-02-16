@@ -2,26 +2,26 @@
 
 ## Overview
 
-Claude Code Starter is an intelligent CLI tool that analyzes repositories and generates tailored Claude Code configurations. It detects your tech stack, creates customized skills, agents, rules, and commands, then uses the Claude CLI to deeply analyze the project and generate a comprehensive CLAUDE.md.
+Claude Code Starter is an intelligent CLI tool that analyzes repositories and generates tailored Claude Code configurations. It detects your tech stack, creates a `settings.json` with permission patterns, then uses the Claude CLI to deeply analyze the project and generate all content files (CLAUDE.md, skills, agents, rules, commands).
 
 ```
 your-project/
 └── .claude/
-    ├── CLAUDE.md          # Project-specific instructions
-    ├── settings.json      # Claude Code permissions
-    ├── agents/            # Specialized AI personas
+    ├── CLAUDE.md          # Project-specific instructions (Claude-generated)
+    ├── settings.json      # Claude Code permissions (deterministic)
+    ├── agents/            # Specialized AI personas (Claude-generated)
     │   ├── code-reviewer.md
     │   └── test-writer.md
-    ├── commands/          # Slash commands (/task, /status, etc.)
+    ├── commands/          # Slash commands (Claude-generated)
     │   ├── task.md
     │   ├── status.md
     │   ├── done.md
     │   ├── analyze.md
     │   └── code-review.md
-    ├── rules/             # Code style rules
+    ├── rules/             # Code style rules (Claude-generated)
     │   ├── typescript.md  # (or python.md, etc.)
     │   └── code-style.md
-    ├── skills/            # Methodology guides
+    ├── skills/            # Methodology guides (Claude-generated)
     │   ├── pattern-discovery.md
     │   ├── systematic-debugging.md
     │   ├── testing-methodology.md
@@ -50,12 +50,12 @@ your-project/
 ```
 claude-code-starter/
 ├── src/
-│   ├── types.ts         # Type definitions
+│   ├── types.ts         # Type definitions (Args, TechStack, ProjectInfo, NewProjectPreferences)
 │   ├── analyzer.ts      # Repository analysis & tech stack detection
-│   ├── generator.ts     # Artifact generation (skills, agents, rules)
-│   ├── prompt.ts        # Claude CLI analysis prompt
+│   ├── generator.ts     # Deterministic artifacts (settings.json + directory creation)
+│   ├── prompt.ts        # Claude CLI prompt — generates ALL content files
 │   ├── cli.ts           # Main CLI entry point
-│   └── cli.test.ts      # Unit tests (124 tests)
+│   └── cli.test.ts      # Unit tests
 ├── docs/                # GitHub Pages & documentation
 │   ├── index.html       # Landing page
 │   ├── ARCHITECTURE.md  # This file
@@ -75,8 +75,7 @@ Core type definitions used across all modules:
 | `Args` | CLI argument flags |
 | `TechStack` | Detected languages, frameworks, tools |
 | `ProjectInfo` | Full repository analysis result |
-| `GeneratedArtifact` | Single generated file (skill, agent, rule, command) |
-| `GenerationResult` | Complete generation output |
+| `NewProjectPreferences` | User preferences for new projects (language, framework, tooling, project type) |
 
 ### `src/analyzer.ts`
 
@@ -100,28 +99,35 @@ Repository analysis and tech stack detection:
 
 ### `src/generator.ts`
 
-Dynamic artifact generation based on detected tech stack:
+Minimal deterministic artifact generation (~156 lines). Only handles non-AI-generated artifacts:
 
 | Function | Purpose |
 |----------|---------|
-| `generateArtifacts(projectInfo)` | Generate all artifacts |
-| `writeArtifacts(artifacts, dir, force)` | Write to filesystem |
-
-**Generator functions:**
-- `generateSettings()` - Permissions configuration
-- `generateSkills()` - Methodology guides + framework patterns
-- `generateAgents()` - Code reviewer, test writer
-- `generateRules()` - Language conventions
-- `generateCommands()` - /task, /status, /done, /analyze
+| `ensureDirectories(rootDir)` | Create `.claude/` subdirectories (skills, agents, rules, commands, state) |
+| `generateSettings(stack)` | Build `settings.json` with permission patterns based on detected tech stack |
+| `writeSettings(rootDir, stack)` | Write `settings.json` to disk |
 
 ### `src/prompt.ts`
 
-Claude CLI analysis prompt for deep project analysis:
+Claude CLI prompt that generates ALL content files (~752 lines). This is where the heavy lifting happens:
 
 | Function | Purpose |
 |----------|---------|
-| `getAnalysisPrompt(projectInfo)` | Build the full analysis prompt with tech stack context |
-| `buildContextSection(projectInfo)` | Format pre-detected tech stack as prompt context |
+| `getAnalysisPrompt(projectInfo)` | Build the full multi-phase prompt with tech stack context |
+
+**Internal helpers:**
+- `buildContextSection(projectInfo)` - Format pre-detected tech stack as prompt context
+- `buildTemplateVariables(projectInfo)` - Build template variables (test commands, lint commands, source globs)
+- `getTestCommand(stack)` - Determine the test command for the detected stack
+- `getLintCommand(stack)` - Determine the lint command for the detected stack
+- `getSourceGlobs(stack)` - Determine source file globs for the detected stack
+
+**Prompt constants (composing the multi-phase protocol):**
+- `ANALYSIS_PROMPT` - Phase 1-3: Discovery, CLAUDE.md generation, quality check
+- `SKILLS_PROMPT` - Phase 4: Generate methodology and framework-specific skills
+- `AGENTS_PROMPT` - Phase 5: Generate code reviewer and test writer agents
+- `RULES_PROMPT` - Phase 6: Generate language-specific coding rules
+- `COMMANDS_PROMPT` - Phase 7: Generate slash commands (/task, /status, /done, etc.)
 
 ### `src/cli.ts`
 
@@ -132,8 +138,8 @@ Main entry point with CLI orchestration:
 | `parseArgs(args)` | Parse CLI flags |
 | `getVersion()` | Return package version |
 | `checkClaudeCli()` | Verify Claude CLI is installed |
-| `runClaudeAnalysis(dir, projectInfo)` | Spawn Claude CLI for deep analysis |
-| `main()` | CLI flow: analyze → generate → Claude analysis → summary |
+| `runClaudeAnalysis(dir, projectInfo)` | Spawn Claude CLI for deep analysis + content generation |
+| `main()` | CLI flow: analyze -> write settings + dirs -> Claude generates all content -> summary |
 
 ## Data Flow
 
@@ -146,8 +152,8 @@ flowchart TB
         D -->|Yes| E[Prompt User]
         D -->|No| F[Check Claude CLI]
         E --> F
-        F --> G[Generate Supporting Artifacts]
-        G --> H[Write Files]
+        F --> G[Write settings.json + Ensure Directories]
+        G --> H[Create Task File]
         H --> I[Run Claude Analysis]
         I --> J[Show Summary]
     end
@@ -162,27 +168,28 @@ flowchart TB
         K --> Q[detectCICD]
     end
 
-    subgraph Generator["generator.ts"]
+    subgraph Generator["generator.ts (deterministic only)"]
         G --> R[generateSettings]
-        G --> S[generateSkills]
-        G --> T[generateAgents]
-        G --> U[generateRules]
-        G --> V[generateCommands]
+        G --> S[ensureDirectories]
     end
 
     subgraph ClaudeCLI["Claude CLI (prompt.ts)"]
-        I --> W[getAnalysisPrompt]
-        W --> X[claude -p: Deep Analysis]
-        X --> Y[Write CLAUDE.md]
+        I --> T[getAnalysisPrompt]
+        T --> U[Phase 1-3: Analyze + CLAUDE.md]
+        U --> V[Phase 4: Skills]
+        V --> W[Phase 5: Agents]
+        W --> X[Phase 6: Rules]
+        X --> Y[Phase 7: Commands]
     end
 
     subgraph Output[".claude/"]
-        H --> Z[settings.json]
-        H --> AA[skills/]
-        H --> AB[agents/]
-        H --> AC[rules/]
-        H --> AD[commands/]
-        Y --> AE[CLAUDE.md]
+        R --> Z[settings.json]
+        S --> AA[directories]
+        Y --> AB[CLAUDE.md]
+        Y --> AC[skills/]
+        Y --> AD[agents/]
+        Y --> AE[rules/]
+        Y --> AF[commands/]
     end
 ```
 
@@ -194,8 +201,9 @@ flowchart TB
 │ (cli.ts)    │     │(analyzer.ts) │     │(generator.ts) │     │ (prompt.ts)   │
 └─────────────┘     └──────────────┘     └───────────────┘     └───────────────┘
       │                    │                     │                     │
-      │              ProjectInfo            Artifacts[]          CLAUDE.md
-      │                    │                     │                     │
+      │              ProjectInfo           settings.json         ALL content
+      │                    │              + directories       (CLAUDE.md, skills,
+      │                    │                                  agents, rules, cmds)
       ▼                    ▼                     ▼                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         User's Project                                     │
@@ -216,30 +224,17 @@ The analyzer detects technologies by examining:
 | Linting | Config files (.eslintrc, biome.json, ruff.toml) |
 | CI/CD | Workflow files (.github/workflows/, .gitlab-ci.yml) |
 
-## Generated Artifacts
+## Generated Output
 
-Artifacts are generated based on the detected tech stack:
-
-| Artifact | Always Generated | Conditional |
-|----------|-----------------|-------------|
-| CLAUDE.md (via Claude CLI) | ✓ | - |
-| settings.json | ✓ | - |
-| pattern-discovery.md | ✓ | - |
-| systematic-debugging.md | ✓ | - |
-| testing-methodology.md | ✓ | - |
-| iterative-development.md | ✓ | - |
-| commit-hygiene.md | ✓ | - |
-| code-deduplication.md | ✓ | - |
-| simplicity-rules.md | ✓ | - |
-| security.md | ✓ | - |
-| code-reviewer.md | ✓ | - |
-| test-writer.md | ✓ | - |
-| code-review.md (command) | ✓ | - |
-| typescript.md | - | TypeScript detected |
-| python.md | - | Python detected |
-| nextjs-patterns.md | - | Next.js detected |
-| fastapi-patterns.md | - | FastAPI detected |
-| nestjs-patterns.md | - | NestJS detected |
+| Output | Generated By | Method |
+|--------|-------------|--------|
+| `settings.json` | `generator.ts` | Deterministic — permission patterns from detected tech stack |
+| `.claude/` directories | `generator.ts` | Deterministic — `ensureDirectories()` |
+| `CLAUDE.md` | Claude CLI | AI-generated via Phase 1-3 of prompt |
+| `skills/*.md` | Claude CLI | AI-generated via Phase 4 of prompt |
+| `agents/*.md` | Claude CLI | AI-generated via Phase 5 of prompt |
+| `rules/*.md` | Claude CLI | AI-generated via Phase 6 of prompt |
+| `commands/*.md` | Claude CLI | AI-generated via Phase 7 of prompt |
 
 ## Build & Test
 
@@ -251,7 +246,7 @@ bun run dev          # Watch mode
 bun run build        # Compile to dist/
 
 # Test
-bun test             # Run all 124 tests
+bun test             # Run all tests
 
 # Type check
 bun run typecheck    # TypeScript validation
@@ -274,12 +269,13 @@ Deploys `docs/` folder to GitHub Pages on push to main.
 
 ## Design Decisions
 
-### Why Dynamic Generation?
+### Why Claude-Generated Content?
 
-Instead of copying static templates, the CLI generates content based on detected technologies:
-- **Tailored output**: Only relevant skills/rules are created
-- **No bloat**: Projects only get what they need
-- **Deep analysis**: CLAUDE.md is generated by Claude CLI reading actual source files, not static templates
+Instead of maintaining ~3000 lines of hardcoded markdown templates in `generator.ts`, Claude generates all content files tailored to each specific project. This was changed because:
+- **Claude already knows** all the framework patterns, debugging guides, and coding conventions better than any static template
+- **Tailored output**: Content is specific to the actual project, not generic boilerplate
+- **Maintainability**: No need to update templates when frameworks evolve
+- **Only `settings.json` remains deterministic** — permission patterns must be exact, not AI-generated
 
 ### Why Bun?
 
@@ -291,11 +287,3 @@ Instead of copying static templates, the CLI generates content based on detected
 
 - Broader user base can run via `npx`
 - npm registry is the standard distribution channel
-
-### Why Large generator.ts?
-
-The generator file (~2600 lines) contains all artifact templates. This is intentional:
-- All templates are related (skills, agents, rules, commands)
-- Easy to search and find templates
-- Splitting would scatter related content
-- No code duplication that warrants abstraction
