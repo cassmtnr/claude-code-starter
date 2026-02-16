@@ -3,25 +3,36 @@
 ## [Unreleased]
 
 ### Changed
-- **Claude-powered CLAUDE.md generation** - Replaced static string-concatenation CLAUDE.md generation with Claude CLI deep analysis
-  - `npx claude-code-starter` now spawns `claude -p` to read actual source files and generate project-specific documentation
-  - Claude CLI is now a hard requirement (exits with error + install link if missing)
-  - Removed `generateClaudeMd()` and all static CLAUDE.md generation code
-  - Removed `--static` / `-s` flag (no fallback mode)
-  - Supporting files (skills, agents, rules, commands, settings.json) are still generated statically
+- **Full Claude-powered content generation** - Claude now generates ALL `.claude/` content files, not just CLAUDE.md
+  - `generator.ts` gutted from ~3050 lines to ~156 lines — only handles `settings.json` and directory creation
+  - `prompt.ts` expanded to ~752 lines with a 7-phase protocol (Discovery, CLAUDE.md, Quality Check, Skills, Agents, Rules, Commands)
+  - CLI flow changed from `generateArtifacts -> writeArtifacts` to `writeSettings + ensureDirectories -> Claude generates everything`
+  - Claude CLI is a hard requirement (exits with error + install link if missing)
+- **Expanded new project preferences** - `NewProjectPreferences` now includes `packageManager`, `testingFramework`, `linter`, `formatter`, `projectType`
 
 ### Added
-- `src/prompt.ts` - Embedded analysis prompt module with 3-phase protocol (Discovery, Generation, Quality Check)
+- `src/prompt.ts` - Comprehensive multi-phase prompt module:
+  - `getAnalysisPrompt()` composes all phases into a single prompt
+  - `buildTemplateVariables()` builds context variables (test commands, lint commands, source globs)
+  - `getTestCommand()`, `getLintCommand()`, `getSourceGlobs()` helpers
+  - `ANALYSIS_PROMPT`, `SKILLS_PROMPT`, `AGENTS_PROMPT`, `RULES_PROMPT`, `COMMANDS_PROMPT` constants
+- `ensureDirectories()` in generator.ts — creates `.claude/` subdirectory structure
+- `writeSettings()` in generator.ts — writes `settings.json` to disk
+- `createTaskFile()` in cli.ts — creates initial task tracking file
 - `checkClaudeCli()` - Verifies Claude CLI is installed before proceeding
 - `runClaudeAnalysis()` - Spawns Claude CLI with `--allowedTools` for safe, scoped file access
 - ESM entry point guard - `main()` only runs when executed directly, not when imported by tests
 
 ### Removed
-- `generateClaudeMd()` function from generator.ts (dead code - output was never written)
-- `getCommonCommands()` function from generator.ts (only used by removed `generateClaudeMd`)
-- Duplicate `formatLanguage()` / `formatFramework()` from generator.ts (already exist in cli.ts)
-- `"claude-md"` artifact type from `GeneratedArtifact` union
-- 13 tests that validated static CLAUDE.md content generation
+- `GeneratedArtifact` interface from types.ts
+- `GenerationResult` interface from types.ts
+- `generateArtifacts()` from generator.ts
+- `writeArtifacts()` from generator.ts
+- `generateSkills()`, `generateAgents()`, `generateRules()`, `generateCommands()` from generator.ts
+- `generateClaudeMd()`, `getCommonCommands()` from generator.ts
+- All hardcoded markdown templates (~2900 lines of static content)
+- `"claude-md"` artifact type
+- `--static` / `-s` flag
 - `static` field from `Args` interface
 
 ## [0.3.0]
