@@ -1,3 +1,9 @@
+## [0.11.0](https://github.com/cassmtnr/claude-code-starter/compare/0.10.0...0.11.0) (2026-02-16)
+
+### Features
+
+* Enhance project analysis and artifact generation ([36e6927](https://github.com/cassmtnr/claude-code-starter/commit/36e6927e53716815242e9129ee1f1a3166e69611))
+
 ## [0.10.0](https://github.com/cassmtnr/claude-code-starter/compare/0.9.0...0.10.0) (2026-02-16)
 
 ### Features
