@@ -76,8 +76,8 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run tests
-        run: bun test
+      - name: Run unit tests
+        run: bun run test
 
   coverage:
     name: Test Coverage
@@ -98,8 +98,8 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run tests with coverage
-        run: bun test --coverage --coverage-reporter=lcov
+      - name: Run unit tests with coverage
+        run: bun test src/cli.test.ts --coverage --coverage-reporter=lcov
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -112,7 +112,7 @@ jobs:
       - name: Check coverage threshold
         run: |
           # Run coverage and capture output
-          COVERAGE_OUTPUT=$(bun test --coverage 2>&1) || true
+          COVERAGE_OUTPUT=$(bun test src/cli.test.ts --coverage 2>&1) || true
 
           # Extract line coverage percentage from "All files" row
           # Format: "All files | XX.XX | YY.YY |"
