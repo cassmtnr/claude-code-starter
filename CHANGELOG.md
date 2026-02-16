@@ -1,3 +1,10 @@
+## [0.9.0](https://github.com/cassmtnr/claude-code-starter/compare/0.8.0...0.9.0) (2026-02-16)
+
+### Features
+
+* add end-to-end tests for CLI and update workflows to include E2E testing ([f739181](https://github.com/cassmtnr/claude-code-starter/commit/f73918120dcaab680a973ad1cc62c4e60f4cc439))
+* update test commands in workflows for consistency and clarity ([02d9b9a](https://github.com/cassmtnr/claude-code-starter/commit/02d9b9a5781669ffb22bcfa2cc7e9e65d0b5d1af))
+
 ## [0.8.0](https://github.com/cassmtnr/claude-code-starter/compare/0.7.0...0.8.0) (2026-02-14)
 
 ### Features
