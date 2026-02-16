@@ -76,8 +76,8 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run tests
-        run: bun test
+      - name: Run unit tests
+        run: bun run test
 
   coverage:
     name: Test Coverage
@@ -98,8 +98,8 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run tests with coverage
-        run: bun test --coverage --coverage-reporter=lcov
+      - name: Run unit tests with coverage
+        run: bun test src/cli.test.ts --coverage --coverage-reporter=lcov
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -112,7 +112,7 @@ jobs:
       - name: Check coverage threshold
         run: |
           # Run coverage and capture output
-          COVERAGE_OUTPUT=$(bun test --coverage 2>&1) || true
+          COVERAGE_OUTPUT=$(bun test src/cli.test.ts --coverage 2>&1) || true
 
           # Extract line coverage percentage from "All files" row
           # Format: "All files | XX.XX | YY.YY |"
@@ -212,11 +212,34 @@ jobs:
             echo "::warning::Package size (${DIST_SIZE_KB}KB) exceeds 500KB threshold"
           fi
 
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run E2E tests
+        run: bun run test:e2e
+
   # Summary job that depends on all checks passing
   pr-check-complete:
     name: PR Checks Complete
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, coverage, code-quality, build]
+    needs: [lint, typecheck, test, coverage, code-quality, build, e2e]
     steps:
       - name: All checks passed
         run: echo "All PR checks passed successfully!"

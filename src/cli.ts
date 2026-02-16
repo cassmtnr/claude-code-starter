@@ -571,7 +571,8 @@ async function main(): Promise<void> {
 }
 
 // Only run when executed directly, not when imported by tests
-const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+// Use realpathSync to resolve symlinks (e.g., global npm installs link bin/ -> dist/cli.js)
+const isMain = fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   main().catch((err) => {
     console.error(pc.red("Error:"), err.message);
