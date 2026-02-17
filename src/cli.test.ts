@@ -9,6 +9,7 @@ import {
   formatFramework,
   formatLanguage,
   getVersion,
+  mapFormatter,
   parseArgs,
   promptNewProject,
   showBanner,
@@ -350,21 +351,83 @@ describe("formatFramework", () => {
   });
 
   // Swift/iOS frameworks
-  it("formats swiftui correctly", () => {
-    expect(formatFramework("swiftui")).toBe("swiftui");
+  it("formats SwiftUI correctly", () => {
+    expect(formatFramework("swiftui")).toBe("SwiftUI");
   });
 
-  it("formats uikit correctly", () => {
-    expect(formatFramework("uikit")).toBe("uikit");
+  it("formats UIKit correctly", () => {
+    expect(formatFramework("uikit")).toBe("UIKit");
+  });
+
+  it("formats Vapor correctly", () => {
+    expect(formatFramework("vapor")).toBe("Vapor");
+  });
+
+  it("formats SwiftData correctly", () => {
+    expect(formatFramework("swiftdata")).toBe("SwiftData");
+  });
+
+  it("formats Combine correctly", () => {
+    expect(formatFramework("combine")).toBe("Combine");
   });
 
   // Android frameworks
-  it("formats jetpack-compose correctly", () => {
-    expect(formatFramework("jetpack-compose")).toBe("jetpack-compose");
+  it("formats Jetpack Compose correctly", () => {
+    expect(formatFramework("jetpack-compose")).toBe("Jetpack Compose");
   });
 
-  it("formats android-views correctly", () => {
-    expect(formatFramework("android-views")).toBe("android-views");
+  it("formats Android Views correctly", () => {
+    expect(formatFramework("android-views")).toBe("Android Views");
+  });
+
+  it("formats Room correctly", () => {
+    expect(formatFramework("room")).toBe("Room");
+  });
+
+  it("formats Hilt correctly", () => {
+    expect(formatFramework("hilt")).toBe("Hilt");
+  });
+
+  it("formats Ktor correctly", () => {
+    expect(formatFramework("ktor-android")).toBe("Ktor");
+  });
+});
+
+// ============================================================================
+// mapFormatter Tests
+// ============================================================================
+
+describe("mapFormatter", () => {
+  it("maps eslint to prettier", () => {
+    expect(mapFormatter("eslint")).toBe("prettier");
+  });
+
+  it("maps biome to biome", () => {
+    expect(mapFormatter("biome")).toBe("biome");
+  });
+
+  it("maps ruff to ruff", () => {
+    expect(mapFormatter("ruff")).toBe("ruff");
+  });
+
+  it("maps flake8 to black", () => {
+    expect(mapFormatter("flake8")).toBe("black");
+  });
+
+  it("maps clippy to rustfmt", () => {
+    expect(mapFormatter("clippy")).toBe("rustfmt");
+  });
+
+  it("maps rubocop to rubocop", () => {
+    expect(mapFormatter("rubocop")).toBe("rubocop");
+  });
+
+  it("maps golangci-lint to gofmt", () => {
+    expect(mapFormatter("golangci-lint")).toBe("gofmt");
+  });
+
+  it("maps null to null", () => {
+    expect(mapFormatter(null)).toBeNull();
   });
 });
 
