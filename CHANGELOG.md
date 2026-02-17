@@ -1,3 +1,9 @@
+## [0.12.1](https://github.com/cassmtnr/claude-code-starter/compare/0.12.0...0.12.1) (2026-02-17)
+
+### Bug Fixes
+
+* improve formatting in index.html and update footer copyright year ([54b71d9](https://github.com/cassmtnr/claude-code-starter/commit/54b71d9dc6533ef66c3a50817dd033a1b4e78e8d))
+
 ## [0.12.0](https://github.com/cassmtnr/claude-code-starter/compare/0.11.0...0.12.0) (2026-02-16)
 
 ### Features
