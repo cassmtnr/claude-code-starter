@@ -1,3 +1,9 @@
+## [0.12.2](https://github.com/cassmtnr/claude-code-starter/compare/0.12.1...0.12.2) (2026-02-17)
+
+### Bug Fixes
+
+* update cache keys in workflow files and improve framework formatting in tests ([47a065d](https://github.com/cassmtnr/claude-code-starter/commit/47a065d8ab9125dcb1ba197f78f66f0556ccbe35))
+
 ## [0.12.1](https://github.com/cassmtnr/claude-code-starter/compare/0.12.0...0.12.1) (2026-02-17)
 
 ### Bug Fixes
