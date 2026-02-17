@@ -32,7 +32,15 @@ import prompts from "prompts";
 import { analyzeRepository, summarizeTechStack } from "./analyzer.js";
 import { ensureDirectories, writeSettings } from "./generator.js";
 import { getAnalysisPrompt } from "./prompt.js";
-import type { Args, Framework, Language, NewProjectPreferences, ProjectInfo } from "./types.js";
+import type {
+  Args,
+  Formatter,
+  Framework,
+  Language,
+  Linter,
+  NewProjectPreferences,
+  ProjectInfo,
+} from "./types.js";
 
 // ============================================================================
 // Constants
@@ -330,7 +338,7 @@ export async function promptNewProject(args: Args): Promise<NewProjectPreference
     packageManager: pmResponse.packageManager || null,
     testingFramework: testResponse.testingFramework || null,
     linter: lintResponse.linter || null,
-    formatter: lintResponse.linter || null, // Use same as linter for simplicity
+    formatter: mapFormatter(lintResponse.linter || null),
     projectType: typeResponse.projectType || "Other",
   };
 }
@@ -450,6 +458,21 @@ function getLinterFormatterChoices(lang: string) {
   return [{ title: "None", value: null }];
 }
 
+export function mapFormatter(linter: Linter | null): Formatter | null {
+  if (!linter) return null;
+  const mapping: Partial<Record<Linter, Formatter>> = {
+    eslint: "prettier",
+    biome: "biome",
+    ruff: "ruff",
+    flake8: "black",
+    pylint: "black",
+    "golangci-lint": "gofmt",
+    clippy: "rustfmt",
+    rubocop: "rubocop",
+  };
+  return mapping[linter] ?? null;
+}
+
 export function createTaskFile(
   projectInfo: ProjectInfo,
   preferences: NewProjectPreferences | null
@@ -535,7 +558,7 @@ export function formatLanguage(lang: Language): string {
 }
 
 export function formatFramework(fw: Framework): string {
-  const names: Record<string, string> = {
+  const names: Partial<Record<Framework, string>> = {
     nextjs: "Next.js",
     react: "React",
     vue: "Vue.js",
@@ -567,10 +590,24 @@ export function formatFramework(fw: Framework): string {
     sinatra: "Sinatra",
     spring: "Spring",
     quarkus: "Quarkus",
+    // Swift/iOS
+    swiftui: "SwiftUI",
+    uikit: "UIKit",
+    vapor: "Vapor",
+    swiftdata: "SwiftData",
+    combine: "Combine",
+    // Android
+    "jetpack-compose": "Jetpack Compose",
+    "android-views": "Android Views",
+    room: "Room",
+    hilt: "Hilt",
+    "ktor-android": "Ktor",
+    // CSS/UI
     tailwind: "Tailwind CSS",
     shadcn: "shadcn/ui",
     chakra: "Chakra UI",
     mui: "Material UI",
+    // Database/ORM
     prisma: "Prisma",
     drizzle: "Drizzle",
     typeorm: "TypeORM",
@@ -615,7 +652,6 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
       "claude",
       [
         "-p",
-        "--dangerously-skip-permissions",
         "--allowedTools",
         "Read",
         "--allowedTools",
