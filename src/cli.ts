@@ -27,6 +27,7 @@ import { execSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ora from "ora";
 import pc from "picocolors";
 import prompts from "prompts";
 import { analyzeRepository, summarizeTechStack } from "./analyzer.js";
@@ -648,6 +649,15 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
     );
     console.log();
 
+    const spinner = ora({
+      text: "Claude is analyzing your project...",
+      spinner: {
+        interval: 200,
+        frames: ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"],
+      },
+      color: "cyan",
+    }).start();
+
     const child = spawn(
       "claude",
       [
@@ -665,7 +675,7 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
       ],
       {
         cwd: projectDir,
-        stdio: ["pipe", "inherit", "inherit"],
+        stdio: ["pipe", "pipe", "pipe"],
       }
     );
 
@@ -673,17 +683,16 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
     child.stdin.end();
 
     child.on("error", (err) => {
-      console.error(pc.red(`Failed to launch Claude CLI: ${err.message}`));
+      spinner.fail(`Failed to launch Claude CLI: ${err.message}`);
       resolve(false);
     });
 
     child.on("close", (code) => {
       if (code === 0) {
-        console.log();
-        console.log(pc.green("Claude analysis complete!"));
+        spinner.succeed("Claude analysis complete!");
         resolve(true);
       } else {
-        console.error(pc.red(`Claude exited with code ${code}`));
+        spinner.fail(`Claude exited with code ${code}`);
         resolve(false);
       }
     });

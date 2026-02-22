@@ -41,6 +41,7 @@
     "prepublishOnly": "bun run build && bun run test"
   },
   "dependencies": {
+    "ora": "^9.3.0",
     "picocolors": "^1.1.1",
     "prompts": "^2.4.2"
   },
