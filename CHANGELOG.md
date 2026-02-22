@@ -1,3 +1,9 @@
+## [0.13.0](https://github.com/cassmtnr/claude-code-starter/compare/0.12.2...0.13.0) (2026-02-22)
+
+### Features
+
+* add ora spinner for project analysis and update stdio handling ([84fdc63](https://github.com/cassmtnr/claude-code-starter/commit/84fdc630cf1a122f6c0227709a0c62ac6ab0b735))
+
 ## [0.12.2](https://github.com/cassmtnr/claude-code-starter/compare/0.12.1...0.12.2) (2026-02-17)
 
 ### Bug Fixes
