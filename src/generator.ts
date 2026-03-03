@@ -28,14 +28,7 @@ import type { TechStack } from "./types.js";
  * Ensure all required .claude/ subdirectories exist.
  */
 export function ensureDirectories(rootDir: string): void {
-  const dirs = [
-    ".claude",
-    ".claude/skills",
-    ".claude/agents",
-    ".claude/rules",
-    ".claude/commands",
-    ".claude/state",
-  ];
+  const dirs = [".claude", ".claude/skills", ".claude/agents", ".claude/rules", ".claude/commands"];
 
   for (const dir of dirs) {
     fs.mkdirSync(path.join(rootDir, dir), { recursive: true });

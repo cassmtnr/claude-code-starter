@@ -8,7 +8,7 @@
  * - Skills — Methodology and framework-specific guides
  * - Agents — Code reviewer, test writer
  * - Rules — Language-specific conventions
- * - Commands — /task, /status, /done, /analyze, /code-review
+ * - Commands — /analyze, /code-review
  *
  * The prompt is embedded as a string constant so it's bundled by tsup
  * and doesn't require a separate file at runtime.
@@ -52,14 +52,14 @@ ${templateVars}
 
 1. Read this entire prompt to understand all phases
 2. Execute Phase 1 completely - read files, analyze code, gather all data
-3. Execute Phase 2 - generate the CLAUDE.md using only discovered information
+3. Execute Phase 2 - generate the CLAUDE.md (max 120 lines) using only discovered information
 4. Execute Phase 3 - verify quality before writing
 5. Use the Write tool to create \`.claude/CLAUDE.md\` with the final content
-6. Execute Phase 4 - generate ALL skill files
+6. Execute Phase 4 - generate ALL skill files (4 core + framework-specific if detected)
 7. Execute Phase 5 - generate agent files
 8. Execute Phase 6 - generate rule files
-9. Execute Phase 7 - generate command files
-10. Run the Anti-Redundancy Checklist one final time across ALL generated files — if any convention is restated or any rule lacks a \`paths:\` filter, fix it before proceeding
+9. Execute Phase 7 - generate command files (2 commands: analyze, code-review)
+10. Run the Anti-Redundancy Enforcement checks one final time across ALL generated files — if any convention is restated, any command is duplicated, or any rule lacks a \`paths:\` filter, fix it before proceeding
 11. Output a brief summary of what was generated and any gaps found
 
 Do NOT output file contents to stdout. Write all files to disk using the Write tool.
@@ -257,14 +257,26 @@ frequencies, so place information where it costs the least while remaining acces
 5. **Agents have zero main-context cost.** Put detailed checklists and review criteria in agent files — they run in subprocesses and don't consume the user's context window.
 6. **Each piece of information must live in exactly ONE place.** If it's in CLAUDE.md, don't repeat it in rules, skills, or commands.
 
-### Anti-Redundancy Checklist
+### Anti-Redundancy Enforcement
 
-Before writing EACH artifact, verify:
-- [ ] No convention from CLAUDE.md is restated (commit format, naming, import order, etc.)
-- [ ] No content from another artifact is duplicated
-- [ ] Cross-references are used instead of copies (e.g., "Follow conventions in CLAUDE.md")
-- [ ] All rules have a \`paths:\` filter
-- [ ] Information is placed at the lowest-cost tier that still makes it accessible
+Before writing EACH artifact, apply these hard constraints:
+
+- **REJECT** any artifact that restates a convention from CLAUDE.md. If a convention appears in CLAUDE.md, it MUST NOT appear in any other file. Not paraphrased, not summarized, not restated in different words.
+- **Test commands, lint commands, and build commands** MUST appear in exactly ONE place: CLAUDE.md's Common Commands section. Skills and agents MUST write "See Common Commands in CLAUDE.md" instead.
+- **All rules MUST have a \`paths:\` filter** — no unfiltered rules.
+- **Cross-references replace copies** — write "Follow conventions in CLAUDE.md" instead of restating any convention.
+
+#### Forbidden Duplication List
+
+The following MUST NOT appear in skills, agents, rules, or commands — they belong exclusively in CLAUDE.md:
+- Test commands (the literal test runner invocation)
+- Lint commands (the literal linter invocation)
+- Build commands (the literal build invocation)
+- Import convention descriptions (absolute vs relative, ordering, type imports)
+- Naming convention descriptions (camelCase, PascalCase, file naming)
+- Commit format descriptions (conventional commits, message format)
+- Anti-patterns list (things to avoid)
+- Testing framework syntax examples (describe/it/expect — belongs in test-writer agent only)
 
 ---
 
@@ -363,9 +375,13 @@ Read at least 3-5 source files and document the ACTUAL patterns used:
 Using ONLY information discovered in Phase 1, generate the \`.claude/CLAUDE.md\` file.
 Every section must contain PROJECT-SPECIFIC content. Skip sections that don't apply.
 
+**The CLAUDE.md MUST NOT exceed 120 lines. Prioritize density over completeness.**
+
+Do NOT include sections that duplicate information available in package.json, tsconfig.json, or other config files the agent can read directly.
+
 ### Output Structure
 
-The CLAUDE.md MUST follow this structure:
+The CLAUDE.md MUST follow this compact structure:
 
 \`\`\`markdown
 # {Project Name}
@@ -379,17 +395,9 @@ Written for an AI assistant that needs to understand PURPOSE to make good decisi
 
 ## Architecture
 
-{Describe the actual architecture pattern found}
-
-### Directory Structure
-
-\\\`\\\`\\\`
-{Actual directory tree, depth 3, with annotations}
-\\\`\\\`\\\`
-
-### Data Flow
-
-{How a typical request flows through the system}
+{1-2 sentences describing the actual architecture pattern found, then the Key Files table.
+Do NOT include a Directory Structure ASCII tree or Data Flow subsection — the agent can
+read the filesystem directly.}
 
 ### Key Files
 
@@ -397,42 +405,18 @@ Written for an AI assistant that needs to understand PURPOSE to make good decisi
 |------|---------|
 | \`path/to/file\` | What it does |
 
-## Tech Stack
-
-| Category | Technology | Notes |
-|----------|-----------|-------|
-| Language | X | Config details |
-| Framework | Y | How it's used |
-
-## Development Setup
-
-### Prerequisites
-
-{Exact versions and tools needed}
-
-### Getting Started
-
-\\\`\\\`\\\`bash
-{Actual commands to get running}
-\\\`\\\`\\\`
-
-### Environment Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| \`VAR_NAME\` | What it's for | \`example_value\` |
-
 ## Common Commands
 
 \\\`\\\`\\\`bash
-{Actual commands from package.json scripts or equivalent}
+{5 critical commands max, from package.json scripts or equivalent.
+Only the commands developers use daily — not every script.}
 \\\`\\\`\\\`
 
 ## Code Conventions
 
 ### Naming
 
-{ACTUAL naming patterns found}
+{ACTUAL naming patterns found — be brief}
 
 ### Patterns to Follow
 
@@ -445,45 +429,16 @@ Written for an AI assistant that needs to understand PURPOSE to make good decisi
 > **This Code Conventions section is the single source of truth.**
 > Rules and skills cross-reference this section — they do not repeat it.
 
-## Skills
-
-{List each generated skill with a one-line description}
-
-| Skill | Purpose |
-|-------|---------|
-| \`pattern-discovery\` | Discover and document codebase patterns |
-| ... | ... |
-
-## Agents
-
-{List each generated agent with a one-line description}
-
-| Agent | Purpose |
-|-------|---------|
-| \`code-reviewer\` | Reviews code for quality and security |
-| \`test-writer\` | Generates tests for code |
-
 ## Testing
 
-### Running Tests
-
-\\\`\\\`\\\`bash
-{actual test commands}
-\\\`\\\`\\\`
-
-### Writing Tests
-
-{Testing patterns, utilities, fixtures available}
+{2-3 lines: test command, test file location, key testing pattern.
+NOT a full guide — the test-writer agent handles detailed test methodology.}
 
 ## Domain Knowledge
 
 ### Core Entities
 
-{Main domain objects and relationships}
-
-### Key Workflows
-
-{3-5 most important workflows}
+{Brief list of main domain objects and relationships}
 
 ## Gotchas & Important Notes
 
@@ -497,12 +452,22 @@ Written for an AI assistant that needs to understand PURPOSE to make good decisi
 4. {project-specific rules discovered during analysis}
 \`\`\`
 
+**Sections NOT to include** (the agent can read these from config files directly):
+- Directory Structure ASCII tree (agent uses Glob/Read)
+- Tech Stack table (available in package.json, tsconfig.json, etc.)
+- Development Setup / Getting Started / Prerequisites
+- Environment Variables table (available in .env.example)
+- Skills index table
+- Agents index table
+- Key Workflows (duplicates Data Flow / Architecture)
+
 ---
 
 ## Phase 3: Quality Checklist
 
 Before writing the CLAUDE.md, verify:
 
+- [ ] The file does NOT exceed 120 lines
 - [ ] Every section contains PROJECT-SPECIFIC information (not generic boilerplate)
 - [ ] File paths referenced actually exist in the project
 - [ ] File references use \`path/to/file.ts (functionName)\` format, not line numbers
@@ -511,12 +476,13 @@ Before writing the CLAUDE.md, verify:
 - [ ] The "Gotchas" section contains genuinely useful, non-obvious information
 - [ ] An AI reading this CLAUDE.md could add a new feature following existing patterns
 - [ ] Sections without real content have been omitted entirely
+- [ ] No section duplicates information available in config files the agent can read
 
 ### Cross-Artifact Deduplication Check
 
 Before writing ANY artifact (rule, skill, agent, command), verify:
 - [ ] No conventions from CLAUDE.md are restated (naming, commit format, import order, style)
-- [ ] No commit format description is restated outside CLAUDE.md
+- [ ] No item from the Forbidden Duplication List appears outside CLAUDE.md
 - [ ] No content from one artifact is duplicated in another
 - [ ] Cross-references are used instead of copies (e.g., "Follow conventions in CLAUDE.md")
 - [ ] Every rule file has a \`paths:\` filter — no unfiltered rules
@@ -549,56 +515,37 @@ const SKILLS_PROMPT = `---
 Write each skill file to \`.claude/skills/\` using the Write tool. Every skill must have
 YAML frontmatter with \`name\`, \`description\`, and optionally \`globs\` for file matching.
 
-**Tailor ALL skills to this specific project** — use the actual test command, lint command,
-file patterns, and conventions discovered during Phase 1.
+**Tailor ALL skills to this specific project** — use the actual file patterns and
+conventions discovered during Phase 1.
 
 ### Skill Content Rules
 
 1. **Cross-reference, don't copy** — write "Follow conventions in CLAUDE.md" instead of restating naming, style, or commit conventions. Skills focus on methodology (HOW to do something), not conventions (WHAT the conventions are).
 2. **Use stable references** — reference code as \`path/to/file.ts (functionName)\`, not line numbers which become stale.
 3. **No convention duplication** — if CLAUDE.md already documents commit format, import order, or naming rules, the skill must not repeat them.
+4. **No command duplication** — for test, lint, and build commands, write "See Common Commands in CLAUDE.md" instead of repeating the literal command.
 
-### 4.1 Core Skills (ALWAYS generate all 8)
-
-**\`.claude/skills/pattern-discovery.md\`**
-- Name: pattern-discovery
-- Description: Analyze codebase to discover and document patterns
-- Content: How to search for patterns in THIS project's structure. Include the actual source directories, key file patterns, and import conventions found.
-
-**\`.claude/skills/systematic-debugging.md\`**
-- Name: systematic-debugging
-- Description: 4-phase debugging methodology — Reproduce, Locate, Diagnose, Fix
-- Content: Tailor reproduction steps to the project's actual test runner and dev server commands. Include how to use the project's logging/debugging setup.
-
-**\`.claude/skills/testing-methodology.md\`**
-- Name: testing-methodology
-- Description: AAA testing pattern with project-specific framework syntax
-- Content: Use the project's actual testing framework syntax. Include real examples of test patterns found in the codebase (describe/it blocks, pytest fixtures, etc.). Reference the actual test command. Include mocking/stubbing patterns specific to the stack.
+### 4.1 Core Skills (ALWAYS generate all 4)
 
 **\`.claude/skills/iterative-development.md\`**
 - Name: iterative-development
-- Description: TDD workflow with project-specific test and lint commands
-- Content: The TDD loop using the actual test command and lint command. Include the project's verification steps (typecheck, build, etc.).
-
-**\`.claude/skills/commit-hygiene.md\`**
-- Name: commit-hygiene
-- Description: Atomic commits, conventional format, size thresholds
-- Content: Size thresholds (±300 lines per commit), when-to-commit triggers. For commit format, write "Follow the commit conventions in CLAUDE.md" — do NOT restate the format here. If the project uses commitlint or similar, reference its config.
+- Description: TDD workflow with debugging methodology and verification chain
+- Content: The TDD loop referencing "See Common Commands in CLAUDE.md" for actual commands. Include the project's verification steps (typecheck, build, etc.). Add a Debugging section with: 4-phase methodology (Reproduce, Locate, Diagnose, Fix), project-specific file-to-module mapping for tracing bugs, how to use the project's logging/debugging setup. Add commit guidance: size thresholds (±300 lines per commit), when-to-commit triggers, "Follow commit conventions in CLAUDE.md" for format.
 
 **\`.claude/skills/code-deduplication.md\`**
 - Name: code-deduplication
-- Description: Check-before-write principle and search checklist
-- Content: Search existing code before writing new code. Include project-specific glob patterns for source files. Reference the actual directory structure for where to look.
-
-**\`.claude/skills/simplicity-rules.md\`**
-- Name: simplicity-rules
-- Description: Function and file size limits, decomposition patterns
-- Content: Function length limits (40 lines), file limits (300 lines), cyclomatic complexity. Decomposition patterns appropriate for the project's architecture style.
+- Description: Check-before-write principle, search checklist, and size limits
+- Content: Search existing code before writing new code. Include project-specific glob patterns for source files. Reference the actual directory structure for where to look. Include a "Where to Look" checklist for discovering patterns in THIS project's structure (source directories, key file patterns). Add size limits: function length (40 lines), file length (300 lines), decomposition patterns appropriate for the project's architecture style.
 
 **\`.claude/skills/security.md\`**
 - Name: security
 - Description: Security patterns and secrets management for this stack
 - Content: .gitignore entries appropriate for the detected stack. Environment variable handling patterns. OWASP checklist items relevant to the detected framework. Include actual secrets patterns to watch for (API keys, database URLs, etc.).
+
+**\`.claude/skills/testing-methodology.md\`**
+- Name: testing-methodology
+- Description: Test design methodology — what to test, edge cases, test organization
+- Content: Focus on test DESIGN: what to test, how to identify edge cases, test organization strategy, when to use unit vs integration tests. Include project-specific test file naming and location conventions. Reference "See Common Commands in CLAUDE.md" for the test command. Do NOT include testing framework syntax examples (describe/it/expect, pytest fixtures, etc.) — those belong in the test-writer agent, not here. The \`testing-methodology\` skill focuses on test DESIGN (what to test, edge cases, test organization). The \`test-writer\` agent focuses on test EXECUTION (writing code, running tests). They must not overlap.
 
 ### 4.2 Framework-Specific Skills (ONLY if detected)
 
@@ -692,7 +639,8 @@ Body content — instructions for the test writer agent:
 - Follow existing test file naming conventions
 - Include edge cases: empty inputs, nulls, errors, boundaries
 - Mock external dependencies following project patterns
-- Run tests after writing to verify they pass`;
+- Run tests after writing to verify they pass
+- Do NOT duplicate the testing-methodology skill content. The skill covers test design (what to test, edge cases, organization); this agent covers writing and running tests (framework syntax, assertions, execution).`;
 
 // ============================================================================
 // Phase 6: Rules Generation Prompt
@@ -767,39 +715,11 @@ const COMMANDS_PROMPT = `---
 
 ## Phase 7: Generate Commands
 
-Write 5 command files to \`.claude/commands/\`. Each needs YAML frontmatter with
+Write 2 command files to \`.claude/commands/\`. Each needs YAML frontmatter with
 \`allowed-tools\`, \`description\`, and optionally \`argument-hint\`.
 
-### \`.claude/commands/task.md\`
-\`\`\`yaml
----
-allowed-tools: ["Read", "Write", "Edit", "Glob"]
-description: "Start or switch to a new task"
-argument-hint: "<task description>"
----
-\`\`\`
-Body: Instructions to read current \`.claude/state/task.md\`, update status to "In Progress",
-record the task description and timestamp. If starting a new task, archive the previous one.
-
-### \`.claude/commands/status.md\`
-\`\`\`yaml
----
-allowed-tools: ["Read", "Glob", "Grep", "Bash(git status)", "Bash(git diff --stat)"]
-description: "Show current task and session state"
----
-\`\`\`
-Body: Read \`.claude/state/task.md\`, show git status, list recently modified files,
-summarize current state in a concise format.
-
-### \`.claude/commands/done.md\`
-\`\`\`yaml
----
-allowed-tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash(git:*)", "Bash({test_command})", "Bash({lint_command})"]
-description: "Mark current task complete"
----
-\`\`\`
-Body: Run tests and lint checks. If they pass, update \`.claude/state/task.md\`
-status to "Done". Show a summary of what was accomplished. Suggest next steps.
+Do NOT generate task management commands (\`task.md\`, \`status.md\`, \`done.md\`) —
+Claude Code has built-in TaskCreate/TaskUpdate/TaskList tools for task management.
 
 ### \`.claude/commands/analyze.md\`
 \`\`\`yaml

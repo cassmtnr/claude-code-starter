@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 import ora from "ora";
 import pc from "picocolors";
 import prompts from "prompts";
-import { analyzeRepository, summarizeTechStack } from "./analyzer.js";
+import { analyzeRepository } from "./analyzer.js";
 import { ensureDirectories, writeSettings } from "./generator.js";
 import { getAnalysisPrompt } from "./prompt.js";
 import type {
@@ -474,72 +474,6 @@ export function mapFormatter(linter: Linter | null): Formatter | null {
   return mapping[linter] ?? null;
 }
 
-export function createTaskFile(
-  projectInfo: ProjectInfo,
-  preferences: NewProjectPreferences | null
-): void {
-  const taskPath = path.join(projectInfo.rootDir, ".claude", "state", "task.md");
-
-  // Create state directory
-  fs.mkdirSync(path.dirname(taskPath), { recursive: true });
-
-  // Don't overwrite existing task file
-  if (fs.existsSync(taskPath)) {
-    return;
-  }
-
-  let content: string;
-
-  if (projectInfo.isExisting) {
-    content = `# Current Task
-
-## Status: Ready
-
-No active task. Start one with \`/task <description>\`.
-
-## Project Summary
-
-${projectInfo.name}${projectInfo.description ? ` - ${projectInfo.description}` : ""}
-
-**Tech Stack:** ${summarizeTechStack(projectInfo.techStack)}
-
-## Quick Commands
-
-- \`/task\` - Start working on something
-- \`/status\` - See current state
-- \`/analyze\` - Deep dive into code
-- \`/done\` - Mark task complete
-`;
-  } else {
-    const description = preferences?.description || "Explore and set up project";
-    content = `# Current Task
-
-## Status: In Progress
-
-**Task:** ${description}
-
-## Context
-
-New project - setting up from scratch.
-
-${preferences?.framework ? `**Framework:** ${formatFramework(preferences.framework)}` : ""}
-${preferences?.primaryLanguage ? `**Language:** ${formatLanguage(preferences.primaryLanguage)}` : ""}
-
-## Next Steps
-
-1. Define project structure
-2. Set up development environment
-3. Start implementation
-
-## Decisions
-
-(None yet - starting fresh)
-`;
-  }
-
-  fs.writeFileSync(taskPath, content);
-}
-
 export function formatLanguage(lang: Language): string {
   const names: Record<Language, string> = {
     typescript: "TypeScript",
@@ -824,10 +758,7 @@ async function main(): Promise<void> {
   console.log(pc.green("  + .claude/settings.json"));
   console.log();
 
-  // Step 6: Create task file
-  createTaskFile(projectInfo, preferences);
-
-  // Step 7: Run Claude-powered deep analysis for all .claude/ content files
+  // Step 6: Run Claude-powered deep analysis for all .claude/ content files
   const success = await runClaudeAnalysis(projectDir, projectInfo);
 
   if (!success) {
@@ -835,7 +766,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Step 8: Show summary
+  // Step 7: Show summary
   const generatedFiles = getGeneratedFiles(projectDir);
   console.log();
   console.log(pc.green(`Done! (${generatedFiles.length} files)`));
