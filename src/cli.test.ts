@@ -5,7 +5,6 @@ import path from "node:path";
 import { analyzeRepository, detectTechStack, summarizeTechStack } from "./analyzer.js";
 import {
   checkClaudeCli,
-  createTaskFile,
   formatFramework,
   formatLanguage,
   getVersion,
@@ -584,186 +583,6 @@ describe("showTechStack", () => {
 });
 
 // ============================================================================
-// createTaskFile Tests
-// ============================================================================
-
-describe("createTaskFile", () => {
-  let tempDir: string;
-
-  beforeEach(() => {
-    tempDir = createTempDir();
-  });
-
-  afterEach(() => {
-    removeTempDir(tempDir);
-  });
-
-  it("creates task file for existing project", () => {
-    const projectInfo = {
-      isExisting: true,
-      fileCount: 10,
-      techStack: {
-        languages: ["typescript" as const],
-        primaryLanguage: "typescript" as const,
-        frameworks: ["nextjs" as const],
-        primaryFramework: "nextjs" as const,
-        packageManager: "bun" as const,
-        testingFramework: "vitest" as const,
-        linter: null,
-        formatter: null,
-        bundler: null,
-        isMonorepo: false,
-        hasDocker: false,
-        hasCICD: false,
-        cicdPlatform: null,
-        hasClaudeConfig: false,
-        existingClaudeFiles: [],
-      },
-      rootDir: tempDir,
-      name: "test-project",
-      description: "A test project",
-    };
-
-    createTaskFile(projectInfo, null);
-
-    const taskPath = path.join(tempDir, ".claude", "state", "task.md");
-    expect(fs.existsSync(taskPath)).toBe(true);
-
-    const content = fs.readFileSync(taskPath, "utf-8");
-    expect(content).toContain("# Current Task");
-    expect(content).toContain("## Status: Ready");
-    expect(content).toContain("test-project");
-    expect(content).toContain("A test project");
-  });
-
-  it("creates task file for new project with preferences", () => {
-    const projectInfo = {
-      isExisting: false,
-      fileCount: 0,
-      techStack: {
-        languages: [],
-        primaryLanguage: null,
-        frameworks: [],
-        primaryFramework: null,
-        packageManager: null,
-        testingFramework: null,
-        linter: null,
-        formatter: null,
-        bundler: null,
-        isMonorepo: false,
-        hasDocker: false,
-        hasCICD: false,
-        cicdPlatform: null,
-        hasClaudeConfig: false,
-        existingClaudeFiles: [],
-      },
-      rootDir: tempDir,
-      name: "new-project",
-      description: null,
-    };
-
-    const preferences = {
-      description: "Build a new API",
-      primaryLanguage: "typescript" as const,
-      framework: "fastapi" as const,
-      includeTests: true,
-      includeLinting: true,
-      packageManager: null,
-      testingFramework: null,
-      linter: null,
-      formatter: null,
-      projectType: "API/Backend",
-    };
-
-    createTaskFile(projectInfo, preferences);
-
-    const taskPath = path.join(tempDir, ".claude", "state", "task.md");
-    expect(fs.existsSync(taskPath)).toBe(true);
-
-    const content = fs.readFileSync(taskPath, "utf-8");
-    expect(content).toContain("# Current Task");
-    expect(content).toContain("## Status: In Progress");
-    expect(content).toContain("Build a new API");
-    expect(content).toContain("FastAPI");
-    expect(content).toContain("TypeScript");
-  });
-
-  it("does not overwrite existing task file", () => {
-    // Create existing task file
-    const taskDir = path.join(tempDir, ".claude", "state");
-    fs.mkdirSync(taskDir, { recursive: true });
-    const taskPath = path.join(taskDir, "task.md");
-    fs.writeFileSync(taskPath, "# Important work in progress");
-
-    const projectInfo = {
-      isExisting: true,
-      fileCount: 10,
-      techStack: {
-        languages: ["typescript" as const],
-        primaryLanguage: "typescript" as const,
-        frameworks: [],
-        primaryFramework: null,
-        packageManager: null,
-        testingFramework: null,
-        linter: null,
-        formatter: null,
-        bundler: null,
-        isMonorepo: false,
-        hasDocker: false,
-        hasCICD: false,
-        cicdPlatform: null,
-        hasClaudeConfig: false,
-        existingClaudeFiles: [],
-      },
-      rootDir: tempDir,
-      name: "test",
-      description: null,
-    };
-
-    createTaskFile(projectInfo, null);
-
-    // Should not be overwritten
-    const content = fs.readFileSync(taskPath, "utf-8");
-    expect(content).toBe("# Important work in progress");
-  });
-
-  it("creates task file for new project without preferences", () => {
-    const projectInfo = {
-      isExisting: false,
-      fileCount: 0,
-      techStack: {
-        languages: [],
-        primaryLanguage: null,
-        frameworks: [],
-        primaryFramework: null,
-        packageManager: null,
-        testingFramework: null,
-        linter: null,
-        formatter: null,
-        bundler: null,
-        isMonorepo: false,
-        hasDocker: false,
-        hasCICD: false,
-        cicdPlatform: null,
-        hasClaudeConfig: false,
-        existingClaudeFiles: [],
-      },
-      rootDir: tempDir,
-      name: "new-project",
-      description: null,
-    };
-
-    createTaskFile(projectInfo, null);
-
-    const taskPath = path.join(tempDir, ".claude", "state", "task.md");
-    expect(fs.existsSync(taskPath)).toBe(true);
-
-    const content = fs.readFileSync(taskPath, "utf-8");
-    expect(content).toContain("Explore and set up project");
-  });
-});
-
-// ============================================================================
 // Tech Stack Detection Tests
 // ============================================================================
 
@@ -1193,7 +1012,6 @@ describe("ensureDirectories", () => {
     expect(fs.existsSync(path.join(tempDir, ".claude", "agents"))).toBe(true);
     expect(fs.existsSync(path.join(tempDir, ".claude", "rules"))).toBe(true);
     expect(fs.existsSync(path.join(tempDir, ".claude", "commands"))).toBe(true);
-    expect(fs.existsSync(path.join(tempDir, ".claude", "state"))).toBe(true);
   });
 
   it("is idempotent — running twice doesn't error", () => {
@@ -1289,14 +1107,15 @@ describe("getAnalysisPrompt", () => {
   it("includes skills generation instructions", () => {
     const prompt = getAnalysisPrompt(projectInfo);
     expect(prompt).toContain("Phase 4");
-    expect(prompt).toContain("pattern-discovery");
-    expect(prompt).toContain("systematic-debugging");
-    expect(prompt).toContain("testing-methodology");
     expect(prompt).toContain("iterative-development");
-    expect(prompt).toContain("commit-hygiene");
     expect(prompt).toContain("code-deduplication");
-    expect(prompt).toContain("simplicity-rules");
     expect(prompt).toContain("security");
+    expect(prompt).toContain("testing-methodology");
+    // Removed skills should NOT be present as standalone skill files
+    expect(prompt).not.toContain("`.claude/skills/pattern-discovery.md`");
+    expect(prompt).not.toContain("`.claude/skills/systematic-debugging.md`");
+    expect(prompt).not.toContain("`.claude/skills/commit-hygiene.md`");
+    expect(prompt).not.toContain("`.claude/skills/simplicity-rules.md`");
   });
 
   it("includes agents generation instructions", () => {
@@ -1309,19 +1128,21 @@ describe("getAnalysisPrompt", () => {
   it("includes rules generation instructions", () => {
     const prompt = getAnalysisPrompt(projectInfo);
     expect(prompt).toContain("Phase 6");
-    expect(prompt).toContain("code-style");
     expect(prompt).toContain("typescript.md");
     expect(prompt).toContain("python.md");
+    // Should prohibit unfiltered rules, not generate a code-style rule
+    expect(prompt).not.toContain("`.claude/rules/code-style.md`");
   });
 
   it("includes commands generation instructions", () => {
     const prompt = getAnalysisPrompt(projectInfo);
     expect(prompt).toContain("Phase 7");
-    expect(prompt).toContain("task.md");
-    expect(prompt).toContain("status.md");
-    expect(prompt).toContain("done.md");
     expect(prompt).toContain("analyze.md");
     expect(prompt).toContain("code-review.md");
+    // Task management commands should NOT be generated (Claude Code has built-in task tools)
+    expect(prompt).not.toContain("### `.claude/commands/task.md`");
+    expect(prompt).not.toContain("### `.claude/commands/status.md`");
+    expect(prompt).not.toContain("### `.claude/commands/done.md`");
   });
 
   it("includes template variables", () => {
@@ -1388,5 +1209,27 @@ describe("getAnalysisPrompt", () => {
   it("instructs skills to cross-reference CLAUDE.md", () => {
     const prompt = getAnalysisPrompt(projectInfo);
     expect(prompt).toContain("Cross-reference, don't copy");
+  });
+
+  it("enforces CLAUDE.md line limit", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("MUST NOT exceed 120 lines");
+  });
+
+  it("prohibits command duplication in skills", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Forbidden Duplication List");
+    expect(prompt).toContain("MUST NOT appear in skills, agents, rules, or commands");
+  });
+
+  it("instructs test-writer agent to not duplicate testing-methodology skill", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Do NOT duplicate the testing-methodology skill content");
+  });
+
+  it("excludes task management commands", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Do NOT generate task management commands");
+    expect(prompt).toContain("built-in TaskCreate/TaskUpdate/TaskList");
   });
 });
