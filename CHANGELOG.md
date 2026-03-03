@@ -1,3 +1,9 @@
+## [0.14.0](https://github.com/cassmtnr/claude-code-starter/compare/0.13.0...0.14.0) (2026-03-03)
+
+### Features
+
+* improve generator release ([5a55801](https://github.com/cassmtnr/claude-code-starter/commit/5a5580189673b616c6e243d2fc7d29076b2a7a6b))
+
 ## [0.13.0](https://github.com/cassmtnr/claude-code-starter/compare/0.12.2...0.13.0) (2026-02-22)
 
 ### Features
