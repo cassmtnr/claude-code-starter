@@ -59,7 +59,8 @@ ${templateVars}
 7. Execute Phase 5 - generate agent files
 8. Execute Phase 6 - generate rule files
 9. Execute Phase 7 - generate command files
-10. Output a brief summary of what was generated and any gaps found
+10. Run the Anti-Redundancy Checklist one final time across ALL generated files — if any convention is restated or any rule lacks a \`paths:\` filter, fix it before proceeding
+11. Output a brief summary of what was generated and any gaps found
 
 Do NOT output file contents to stdout. Write all files to disk using the Write tool.
 Generate ALL files in a single pass — do not stop after CLAUDE.md.`;
@@ -231,6 +232,39 @@ complete context to work effectively in this project.
 **This is NOT a generic template.** Every file must contain information specific to THIS
 project, discovered through actual file reading and analysis. If you cannot determine
 something, omit that section entirely - do not fill in generic boilerplate.
+
+---
+
+## Artifact Architecture
+
+Understanding the context cost of each artifact type is critical. Artifacts load at different
+frequencies, so place information where it costs the least while remaining accessible:
+
+| Artifact | When Loaded | Context Cost |
+|----------|-------------|--------------|
+| CLAUDE.md | Every turn | Highest — keep concise |
+| Rule without \`paths:\` | Every session | High — avoid generating these |
+| Rule with \`paths:\` | When matching files are open | Medium — use sparingly |
+| Skill / Command | On-demand (user invokes) | Low |
+| Agent | Spawned in subprocess | Zero main-context cost |
+
+### Placement Rules
+
+1. **CLAUDE.md is the single source of truth for conventions.** All naming, style, commit format, and project rules live here and ONLY here.
+2. **NEVER generate rules without \`paths:\` filters.** A rule without \`paths:\` loads every session and competes with CLAUDE.md for context. All general style information belongs in CLAUDE.md.
+3. **Rules must be concise, non-redundant supplements.** A language rule (e.g., \`typescript.md\` with \`paths: ["**/*.ts"]\`) should ONLY contain language-specific gotchas (compiler flags, import quirks, tooling-specific settings) that don't belong in CLAUDE.md.
+4. **Skills are for rich on-demand methodology.** Write "Follow conventions in CLAUDE.md" instead of restating conventions. Focus skills on HOW (methodology), not WHAT (conventions).
+5. **Agents have zero main-context cost.** Put detailed checklists and review criteria in agent files — they run in subprocesses and don't consume the user's context window.
+6. **Each piece of information must live in exactly ONE place.** If it's in CLAUDE.md, don't repeat it in rules, skills, or commands.
+
+### Anti-Redundancy Checklist
+
+Before writing EACH artifact, verify:
+- [ ] No convention from CLAUDE.md is restated (commit format, naming, import order, etc.)
+- [ ] No content from another artifact is duplicated
+- [ ] Cross-references are used instead of copies (e.g., "Follow conventions in CLAUDE.md")
+- [ ] All rules have a \`paths:\` filter
+- [ ] Information is placed at the lowest-cost tier that still makes it accessible
 
 ---
 
@@ -408,6 +442,27 @@ Written for an AI assistant that needs to understand PURPOSE to make good decisi
 
 {What NOT to do based on codebase conventions}
 
+> **This Code Conventions section is the single source of truth.**
+> Rules and skills cross-reference this section — they do not repeat it.
+
+## Skills
+
+{List each generated skill with a one-line description}
+
+| Skill | Purpose |
+|-------|---------|
+| \`pattern-discovery\` | Discover and document codebase patterns |
+| ... | ... |
+
+## Agents
+
+{List each generated agent with a one-line description}
+
+| Agent | Purpose |
+|-------|---------|
+| \`code-reviewer\` | Reviews code for quality and security |
+| \`test-writer\` | Generates tests for code |
+
 ## Testing
 
 ### Running Tests
@@ -450,11 +505,22 @@ Before writing the CLAUDE.md, verify:
 
 - [ ] Every section contains PROJECT-SPECIFIC information (not generic boilerplate)
 - [ ] File paths referenced actually exist in the project
+- [ ] File references use \`path/to/file.ts (functionName)\` format, not line numbers
 - [ ] Commands listed are verified from package.json scripts or equivalent
 - [ ] Code conventions were observed from ACTUAL source files
 - [ ] The "Gotchas" section contains genuinely useful, non-obvious information
 - [ ] An AI reading this CLAUDE.md could add a new feature following existing patterns
 - [ ] Sections without real content have been omitted entirely
+
+### Cross-Artifact Deduplication Check
+
+Before writing ANY artifact (rule, skill, agent, command), verify:
+- [ ] No conventions from CLAUDE.md are restated (naming, commit format, import order, style)
+- [ ] No commit format description is restated outside CLAUDE.md
+- [ ] No content from one artifact is duplicated in another
+- [ ] Cross-references are used instead of copies (e.g., "Follow conventions in CLAUDE.md")
+- [ ] Every rule file has a \`paths:\` filter — no unfiltered rules
+- [ ] Single-language rules are justified (add genuine value beyond CLAUDE.md)
 
 ---
 
@@ -462,7 +528,7 @@ Before writing the CLAUDE.md, verify:
 
 1. **Be specific, not generic.** "Uses React with hooks" is useless. "Uses React 18 with Server Components via Next.js App Router, client components in src/components/client/ with 'use client' directive" is useful.
 
-2. **Reference real files.** Every pattern should reference an actual file as an example. Use \`path/to/file.ts:lineNumber\` format.
+2. **Reference real files.** Every pattern should reference an actual file as an example. Use \`path/to/file.ts (functionName)\` format — NOT line numbers, which become stale as code changes.
 
 3. **Prioritize actionable information.** Focus on what helps an AI write correct code: where to put new code, what patterns to follow, what to avoid, how to test.
 
@@ -485,6 +551,12 @@ YAML frontmatter with \`name\`, \`description\`, and optionally \`globs\` for fi
 
 **Tailor ALL skills to this specific project** — use the actual test command, lint command,
 file patterns, and conventions discovered during Phase 1.
+
+### Skill Content Rules
+
+1. **Cross-reference, don't copy** — write "Follow conventions in CLAUDE.md" instead of restating naming, style, or commit conventions. Skills focus on methodology (HOW to do something), not conventions (WHAT the conventions are).
+2. **Use stable references** — reference code as \`path/to/file.ts (functionName)\`, not line numbers which become stale.
+3. **No convention duplication** — if CLAUDE.md already documents commit format, import order, or naming rules, the skill must not repeat them.
 
 ### 4.1 Core Skills (ALWAYS generate all 8)
 
@@ -511,7 +583,7 @@ file patterns, and conventions discovered during Phase 1.
 **\`.claude/skills/commit-hygiene.md\`**
 - Name: commit-hygiene
 - Description: Atomic commits, conventional format, size thresholds
-- Content: Size thresholds (±300 lines per commit), when-to-commit triggers, conventional commit format. If the project uses commitlint or similar, reference its config.
+- Content: Size thresholds (±300 lines per commit), when-to-commit triggers. For commit format, write "Follow the commit conventions in CLAUDE.md" — do NOT restate the format here. If the project uses commitlint or similar, reference its config.
 
 **\`.claude/skills/code-deduplication.md\`**
 - Name: code-deduplication
@@ -632,18 +704,20 @@ const RULES_PROMPT = `---
 
 Write rule files to \`.claude/rules/\`. Each rule file needs YAML frontmatter.
 
-### Always Generate:
+### Important: No Unfiltered Rules
 
-**\`.claude/rules/code-style.md\`** (no \`paths\` — applies to all files)
+Do NOT generate a \`code-style.md\` rule or any rule without a \`paths:\` filter. General style information (formatter, linter commands, comment style, error handling, commit conventions, import ordering) belongs in CLAUDE.md — not in a rule that loads every session and duplicates it.
 
-Content based on what was discovered in Phase 1:
-- Which formatter/linter to use and how (include actual commands)
-- Comment style: "why" not "what", keep comments current
-- Error handling patterns specific to this project
-- Git commit message conventions (conventional commits if commitlint is configured)
-- Import ordering conventions found in the codebase
+NEVER generate rules without \`paths:\` filters. Every rule must target specific file types.
 
 ### Conditional Rules (generate ONLY if the language was detected):
+
+**Constraints for all conditional rules:**
+- Every rule MUST have a \`paths:\` filter targeting language-specific file extensions
+- Keep rules concise: 5-15 lines of content maximum
+- Rules must NOT repeat conventions already in CLAUDE.md (naming, style, commit format, import order)
+- For single-language projects: only generate a language rule if it adds genuine value beyond CLAUDE.md (compiler flags, import quirks, tooling-specific gotchas)
+- Focus on: compiler/interpreter settings, language-specific gotchas, tooling-specific configuration — not general naming or style
 
 **TypeScript detected** → Write \`.claude/rules/typescript.md\`
 \`\`\`yaml
@@ -745,7 +819,8 @@ allowed-tools: ["Read", "Glob", "Grep", "Bash(git diff)", "Bash(git diff --cache
 description: "Review code changes for quality and security"
 ---
 \`\`\`
-Body: Review staged and unstaged changes. Check for: naming consistency,
-error handling, security issues, test coverage, import organization,
-code duplication. Run the project's linter. Provide a summary with
-severity levels (critical, warning, suggestion).`;
+Body: This command delegates to the code-reviewer agent for thorough review.
+1. Run \`git diff\` and \`git diff --cached\` to identify staged and unstaged changes
+2. Spawn the \`code-reviewer\` agent to perform the full review
+3. If the agent is unavailable, perform a lightweight review: run the linter and check for obvious issues
+Do NOT duplicate the code-reviewer agent's checklist here — the agent has the full review criteria.`;

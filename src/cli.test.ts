@@ -1361,4 +1361,32 @@ describe("getAnalysisPrompt", () => {
     expect(prompt).toContain("Execute Phase 7");
     expect(prompt).toContain("Write all files to disk using the Write tool");
   });
+
+  it("includes artifact architecture guidance", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Artifact Architecture");
+    expect(prompt).toContain("single source of truth");
+    expect(prompt).toContain("Anti-Redundancy");
+  });
+
+  it("prohibits rules without paths filter", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("NEVER generate rules without");
+  });
+
+  it("instructs function-name references instead of line numbers", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("(functionName)");
+    expect(prompt).toContain("NOT line numbers");
+  });
+
+  it("instructs code-review command to delegate to agent", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("delegates to the code-reviewer agent");
+  });
+
+  it("instructs skills to cross-reference CLAUDE.md", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).toContain("Cross-reference, don't copy");
+  });
 });
