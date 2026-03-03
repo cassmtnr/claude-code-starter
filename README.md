@@ -48,9 +48,9 @@ Automatically detects and configures for:
 | -------------- | ------------------------------------------------------------------- |
 | **Languages**  | TypeScript, JavaScript, Python, Go, Rust, Java, Ruby, Swift, Kotlin |
 | **Frameworks** | Next.js, React, Vue, Svelte, FastAPI, Django, NestJS, Express, etc. |
-| **Tools**      | npm, yarn, pnpm, bun, pip, cargo, go modules                       |
+| **Tools**      | npm, yarn, pnpm, bun, pip, cargo, go modules                        |
 | **Testing**    | Jest, Vitest, Pytest, Go test, Rust test                            |
-| **Linting**    | ESLint, Biome, Ruff, Pylint                                        |
+| **Linting**    | ESLint, Biome, Ruff, Pylint                                         |
 
 ## Generated Configurations
 
@@ -64,13 +64,13 @@ Based on your stack, creates:
 
 ## Commands
 
-| Command           | Description                              |
-| ----------------- | ---------------------------------------- |
-| `/task <desc>`    | Start a new task                         |
-| `/status`         | Show current task                        |
-| `/done`           | Mark task complete                       |
-| `/analyze <area>` | Deep dive into code                      |
-| `/code-review`    | Review changes for quality and security  |
+| Command           | Description                             |
+| ----------------- | --------------------------------------- |
+| `/task <desc>`    | Start a new task                        |
+| `/status`         | Show current task                       |
+| `/done`           | Mark task complete                      |
+| `/analyze <area>` | Deep dive into code                     |
+| `/code-review`    | Review changes for quality and security |
 
 ## CLI Options
 
@@ -179,41 +179,41 @@ flowchart LR
 
 ### Artifact Generation
 
-| Artifact Type | Generation Method |
-|---------------|-------------------|
-| **CLAUDE.md** | Claude CLI deep analysis of your actual source files |
-| **settings.json** | Generated with safe default permissions |
-| **Skills** | Core skills + framework-specific patterns (if detected) |
-| **Agents** | Code reviewer and test writer agents |
-| **Rules** | Language-specific conventions + general code style |
-| **Commands** | Task workflow commands (/task, /status, /done, /analyze) |
+| Artifact Type     | Generation Method                                        |
+| ----------------- | -------------------------------------------------------- |
+| **CLAUDE.md**     | Claude CLI deep analysis of your actual source files     |
+| **settings.json** | Generated with safe default permissions                  |
+| **Skills**        | Core skills + framework-specific patterns (if detected)  |
+| **Agents**        | Code reviewer and test writer agents                     |
+| **Rules**         | Language-specific conventions + general code style       |
+| **Commands**      | Task workflow commands (/task, /status, /done, /analyze) |
 
 ### Conflict Resolution
 
 When running on an existing project with `.claude/` configuration:
 
-| Scenario | Behavior |
-|----------|----------|
-| **New file** | Created |
-| **Existing file** | Skipped (preserved) |
-| **With `-f` flag** | Overwritten |
-| **state/task.md** | Always preserved |
+| Scenario           | Behavior            |
+| ------------------ | ------------------- |
+| **New file**       | Created             |
+| **Existing file**  | Skipped (preserved) |
+| **With `-f` flag** | Overwritten         |
+| **state/task.md**  | Always preserved    |
 
 ### Framework-Specific Patterns
 
 When a framework is detected, additional skills are generated:
 
-| Framework | Generated Skill |
-|-----------|-----------------|
-| Next.js | `nextjs-patterns.md` - App Router, Server Components |
-| React | `react-components.md` - Hooks, component patterns |
-| FastAPI | `fastapi-patterns.md` - Async endpoints, Pydantic |
-| NestJS | `nestjs-patterns.md` - Modules, decorators, DI |
-| SwiftUI | `swiftui-patterns.md` - Declarative UI patterns |
-| UIKit | `uikit-patterns.md` - View controller patterns |
-| Vapor | `vapor-patterns.md` - Server-side Swift |
-| Jetpack Compose | `compose-patterns.md` - Compose UI patterns |
-| Android Views | `android-views-patterns.md` - XML views |
+| Framework       | Generated Skill                                      |
+| --------------- | ---------------------------------------------------- |
+| Next.js         | `nextjs-patterns.md` - App Router, Server Components |
+| React           | `react-components.md` - Hooks, component patterns    |
+| FastAPI         | `fastapi-patterns.md` - Async endpoints, Pydantic    |
+| NestJS          | `nestjs-patterns.md` - Modules, decorators, DI       |
+| SwiftUI         | `swiftui-patterns.md` - Declarative UI patterns      |
+| UIKit           | `uikit-patterns.md` - View controller patterns       |
+| Vapor           | `vapor-patterns.md` - Server-side Swift              |
+| Jetpack Compose | `compose-patterns.md` - Compose UI patterns          |
+| Android Views   | `android-views-patterns.md` - XML views              |
 
 ## Requirements
 
@@ -228,14 +228,14 @@ This project uses GitHub Actions for continuous integration and automated releas
 
 Every pull request targeting `main` runs:
 
-| Check | Description |
-|-------|-------------|
-| **Lint** | Biome lint and format validation |
-| **Type Check** | TypeScript compilation check |
-| **Unit Tests** | Full test suite with Bun |
+| Check            | Description                                        |
+| ---------------- | -------------------------------------------------- |
+| **Lint**         | Biome lint and format validation                   |
+| **Type Check**   | TypeScript compilation check                       |
+| **Unit Tests**   | Full test suite with Bun                           |
 | **Code Quality** | Checks for console.log, `any` types, skipped tests |
-| **Build** | Verifies package builds successfully |
-| **Package Size** | Reports bundle size (warns if > 500KB) |
+| **Build**        | Verifies package builds successfully               |
+| **Package Size** | Reports bundle size (warns if > 500KB)             |
 
 ### Automated Releases (`.github/workflows/release.yml`)
 
@@ -252,24 +252,25 @@ When code is merged to `main`, semantic-release automatically:
 
 Use these prefixes for automatic versioning:
 
-| Prefix | Version Bump | Example |
-|--------|--------------|---------|
-| `feat:` | Minor | `feat: add dark mode support` |
-| `fix:` | Patch | `fix: resolve memory leak` |
-| `perf:` | Patch | `perf: optimize image loading` |
-| `BREAKING CHANGE:` | Major | `feat!: redesign API` |
-| `docs:`, `chore:`, `ci:` | No release | `docs: update README` |
+| Prefix                   | Version Bump | Example                        |
+| ------------------------ | ------------ | ------------------------------ |
+| `feat:`                  | Minor        | `feat: add dark mode support`  |
+| `fix:`                   | Patch        | `fix: resolve memory leak`     |
+| `perf:`                  | Patch        | `perf: optimize image loading` |
+| `BREAKING CHANGE:`       | Major        | `feat!: redesign API`          |
+| `docs:`, `chore:`, `ci:` | No release   | `docs: update README`          |
 
 ### Required Secrets
 
 Configure these in your GitHub repository settings:
 
-| Secret | Description | Required For |
-|--------|-------------|--------------|
-| `NPM_TOKEN` | npm authentication token | Publishing to npm |
-| `GITHUB_TOKEN` | Auto-provided by GitHub | Creating releases |
+| Secret         | Description              | Required For      |
+| -------------- | ------------------------ | ----------------- |
+| `NPM_TOKEN`    | npm authentication token | Publishing to npm |
+| `GITHUB_TOKEN` | Auto-provided by GitHub  | Creating releases |
 
 To create an npm token:
+
 1. Go to [npmjs.com](https://npmjs.com) -> Access Tokens
 2. Generate a new "Automation" token
 3. Add it as `NPM_TOKEN` in GitHub repo -> Settings -> Secrets
@@ -298,4 +299,4 @@ bun run typecheck
 
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE) for details.
