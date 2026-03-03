@@ -653,7 +653,7 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
       text: "Claude is analyzing your project...",
       spinner: {
         interval: 200,
-        frames: ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"],
+        frames: ["·", "✢", "✳", "✶", "✳", "✢"],
       },
       color: "cyan",
     }).start();
