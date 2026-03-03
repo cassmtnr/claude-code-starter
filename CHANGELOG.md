@@ -1,3 +1,9 @@
+## [0.14.1](https://github.com/cassmtnr/claude-code-starter/compare/0.14.0...0.14.1) (2026-03-03)
+
+### Code Refactoring
+
+* improved generation prompt ([e248491](https://github.com/cassmtnr/claude-code-starter/commit/e248491a4389d02e7e7e96080b3f26d4a561cb02))
+
 ## [0.14.0](https://github.com/cassmtnr/claude-code-starter/compare/0.13.0...0.14.0) (2026-03-03)
 
 ### Features
