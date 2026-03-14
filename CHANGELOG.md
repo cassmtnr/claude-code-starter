@@ -1,3 +1,9 @@
+## [0.15.0](https://github.com/cassmtnr/claude-code-starter/compare/0.14.1...0.15.0) (2026-03-14)
+
+### Features
+
+* add safety hooks, post-generation validator, and prompt improvements ([74c58a6](https://github.com/cassmtnr/claude-code-starter/commit/74c58a66d9799f4fcf5c4b435b9909e4366a0ced))
+
 ## [0.14.1](https://github.com/cassmtnr/claude-code-starter/compare/0.14.0...0.14.1) (2026-03-03)
 
 ### Code Refactoring
