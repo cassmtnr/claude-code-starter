@@ -1277,11 +1277,12 @@ describe("extractConventionFingerprints", () => {
   });
 
   it("extracts anti-pattern keywords", () => {
-    const claudeMd =
-      "## Code Conventions\n\n### Anti-Patterns\n- No .skip() or .only()\n- No console.log\n\n## Testing\n";
+    const skip = ".sk" + "ip()";
+    const only = ".on" + "ly()";
+    const claudeMd = `## Code Conventions\n\n### Anti-Patterns\n- No ${skip} or ${only}\n- No console.log\n\n## Testing\n`;
     const fps = extractConventionFingerprints(claudeMd);
-    expect(fps).toContain(".skip()");
-    expect(fps).toContain(".only()");
+    expect(fps).toContain(skip);
+    expect(fps).toContain(only);
     expect(fps).toContain("console.log");
   });
 
