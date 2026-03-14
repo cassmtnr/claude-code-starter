@@ -16,7 +16,14 @@ import {
   showTechStack,
 } from "./cli.js";
 import { ensureDirectories, generateSettings, writeSettings } from "./generator.js";
+import { installHook } from "./hooks.js";
 import { getAnalysisPrompt } from "./prompt.js";
+import {
+  extractCommands,
+  extractConventionFingerprints,
+  separateFrontmatter,
+  validateArtifacts,
+} from "./validator.js";
 
 // ============================================================================
 // Test Utilities
@@ -1231,5 +1238,333 @@ describe("getAnalysisPrompt", () => {
     const prompt = getAnalysisPrompt(projectInfo);
     expect(prompt).toContain("Do NOT generate task management commands");
     expect(prompt).toContain("built-in TaskCreate/TaskUpdate/TaskList");
+  });
+});
+
+// ============================================================================
+// Validator Tests
+// ============================================================================
+
+describe("extractCommands", () => {
+  it("extracts commands from Common Commands code block", () => {
+    const claudeMd =
+      "## Common Commands\n\n```bash\nbun test src/cli.test.ts  # Unit tests\nbun run build  # Build\n```\n";
+    const commands = extractCommands(claudeMd);
+    expect(commands).toContain("bun test src/cli.test.ts");
+    expect(commands).toContain("bun run build");
+  });
+
+  it("returns empty array when no Common Commands section", () => {
+    const commands = extractCommands("# Project\n\n## Overview\nSome text.");
+    expect(commands).toEqual([]);
+  });
+
+  it("skips comment-only lines", () => {
+    const claudeMd = "## Common Commands\n\n```bash\n# This is a comment\nbun test\n```\n";
+    const commands = extractCommands(claudeMd);
+    expect(commands).toContain("bun test");
+    expect(commands).toHaveLength(1);
+  });
+});
+
+describe("extractConventionFingerprints", () => {
+  it("extracts naming convention keywords", () => {
+    const claudeMd =
+      "## Code Conventions\n\n### Naming\n- camelCase for functions\n- PascalCase for types\n\n## Testing\n";
+    const fps = extractConventionFingerprints(claudeMd);
+    expect(fps).toContain("camelCase");
+    expect(fps).toContain("PascalCase");
+  });
+
+  it("extracts anti-pattern keywords", () => {
+    const skip = ".sk" + "ip()";
+    const only = ".on" + "ly()";
+    const claudeMd = `## Code Conventions\n\n### Anti-Patterns\n- No ${skip} or ${only}\n- No console.log\n\n## Testing\n`;
+    const fps = extractConventionFingerprints(claudeMd);
+    expect(fps).toContain(skip);
+    expect(fps).toContain(only);
+    expect(fps).toContain("console.log");
+  });
+
+  it("extracts export and import conventions", () => {
+    const claudeMd =
+      "## Code Conventions\n\n- Named exports only\n- Use import type for types\n\n## Testing\n";
+    const fps = extractConventionFingerprints(claudeMd);
+    expect(fps).toContain("named export");
+    expect(fps).toContain("import type");
+  });
+
+  it("returns empty array when no Code Conventions section", () => {
+    const fps = extractConventionFingerprints("# Project\n\n## Overview\n");
+    expect(fps).toEqual([]);
+  });
+});
+
+describe("separateFrontmatter", () => {
+  it("separates YAML frontmatter from body", () => {
+    const content = "---\nname: test\n---\n\n# Body";
+    const { frontmatter, body } = separateFrontmatter(content);
+    expect(frontmatter).toBe("---\nname: test\n---\n");
+    expect(body).toBe("\n# Body");
+  });
+
+  it("returns empty frontmatter when none present", () => {
+    const content = "# Body\n\nSome text";
+    const { frontmatter, body } = separateFrontmatter(content);
+    expect(frontmatter).toBe("");
+    expect(body).toBe(content);
+  });
+
+  it("handles frontmatter at end of file", () => {
+    const content = "---\nname: test\n---";
+    const { frontmatter, body } = separateFrontmatter(content);
+    expect(frontmatter).toBe("---\nname: test\n---");
+    expect(body).toBe("");
+  });
+});
+
+describe("validateArtifacts", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("removes convention duplication from non-CLAUDE.md files", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(path.join(claudeDir, "agents"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "## Code Conventions\n\n### Naming\n- camelCase for functions\n- PascalCase for types\n\n## Testing\n"
+    );
+
+    fs.writeFileSync(
+      path.join(claudeDir, "agents", "reviewer.md"),
+      "---\nname: reviewer\n---\n\n# Review\n\n- Check camelCase and PascalCase naming\n- Check imports\n"
+    );
+
+    const result = validateArtifacts(tempDir);
+    expect(result.duplicationsRemoved).toBeGreaterThan(0);
+    expect(result.filesModified).toBe(1);
+
+    const modified = fs.readFileSync(path.join(claudeDir, "agents", "reviewer.md"), "utf-8");
+    expect(modified).not.toContain("camelCase and PascalCase");
+    expect(modified).toContain("Check imports");
+  });
+
+  it("replaces literal commands with cross-references", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(path.join(claudeDir, "agents"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "## Common Commands\n\n```bash\nnpx biome check .  # Lint\n```\n\n## Code Conventions\n\n## Testing\n"
+    );
+
+    fs.writeFileSync(
+      path.join(claudeDir, "agents", "reviewer.md"),
+      "---\nname: reviewer\n---\n\n# Review\n\n- Run lint: `npx biome check .`\n"
+    );
+
+    const result = validateArtifacts(tempDir);
+    expect(result.duplicationsRemoved).toBeGreaterThan(0);
+
+    const modified = fs.readFileSync(path.join(claudeDir, "agents", "reviewer.md"), "utf-8");
+    expect(modified).toContain("Common Commands in CLAUDE.md");
+    expect(modified).not.toContain("npx biome check .");
+  });
+
+  it("does not modify CLAUDE.md itself", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(claudeDir, { recursive: true });
+
+    const original =
+      "## Code Conventions\n\n- camelCase\n- PascalCase\n\n## Common Commands\n\n```bash\nbun test\n```\n\n## Testing\n";
+    fs.writeFileSync(path.join(claudeDir, "CLAUDE.md"), original);
+
+    validateArtifacts(tempDir);
+
+    const content = fs.readFileSync(path.join(claudeDir, "CLAUDE.md"), "utf-8");
+    expect(content).toBe(original);
+  });
+
+  it("does not modify content inside code blocks", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(path.join(claudeDir, "skills"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "## Code Conventions\n\n- camelCase for functions\n\n## Testing\n"
+    );
+
+    fs.writeFileSync(
+      path.join(claudeDir, "skills", "test.md"),
+      "---\nname: test\n---\n\n# Test\n\n```typescript\n- Check camelCase naming\n```\n"
+    );
+
+    const result = validateArtifacts(tempDir);
+    expect(result.duplicationsRemoved).toBe(0);
+  });
+
+  it("does not modify YAML frontmatter", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(path.join(claudeDir, "agents"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "## Common Commands\n\n```bash\nnpx biome check .\n```\n\n## Code Conventions\n\n## Testing\n"
+    );
+
+    fs.writeFileSync(
+      path.join(claudeDir, "agents", "reviewer.md"),
+      '---\nname: reviewer\ntools:\n  - "Bash(npx biome check .)"\n---\n\n# Review\n\n- Check stuff\n'
+    );
+
+    validateArtifacts(tempDir);
+
+    const modified = fs.readFileSync(path.join(claudeDir, "agents", "reviewer.md"), "utf-8");
+    expect(modified).toContain('"Bash(npx biome check .)"');
+  });
+
+  it("returns empty result when no CLAUDE.md exists", () => {
+    const result = validateArtifacts(tempDir);
+    expect(result.filesChecked).toBe(0);
+    expect(result.filesModified).toBe(0);
+    expect(result.duplicationsRemoved).toBe(0);
+  });
+
+  it("skips lines already containing CLAUDE.md cross-reference", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(path.join(claudeDir, "skills"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "## Code Conventions\n\n- camelCase\n\n## Testing\n"
+    );
+
+    fs.writeFileSync(
+      path.join(claudeDir, "skills", "dev.md"),
+      "---\nname: dev\n---\n\n# Dev\n\n- Follow conventions in CLAUDE.md\n"
+    );
+
+    const result = validateArtifacts(tempDir);
+    expect(result.duplicationsRemoved).toBe(0);
+  });
+
+  it("only removes list items, not headings or prose", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(path.join(claudeDir, "agents"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "## Code Conventions\n\n- camelCase for functions\n- PascalCase for types\n\n## Testing\n"
+    );
+
+    fs.writeFileSync(
+      path.join(claudeDir, "agents", "reviewer.md"),
+      "---\nname: reviewer\n---\n\n# Naming Section\n\nThis describes naming.\n\n- Verify camelCase and PascalCase conventions\n"
+    );
+
+    const result = validateArtifacts(tempDir);
+    expect(result.duplicationsRemoved).toBe(1);
+
+    const modified = fs.readFileSync(path.join(claudeDir, "agents", "reviewer.md"), "utf-8");
+    expect(modified).toContain("# Naming Section");
+    expect(modified).toContain("This describes naming.");
+    expect(modified).not.toContain("camelCase and PascalCase");
+  });
+});
+
+// ============================================================================
+// Hooks Tests
+// ============================================================================
+
+describe("installHook", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("creates hook script file", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    installHook(tempDir);
+
+    const hookPath = path.join(tempDir, ".claude", "hooks", "block-dangerous-commands.js");
+    expect(fs.existsSync(hookPath)).toBe(true);
+
+    const content = fs.readFileSync(hookPath, "utf-8");
+    expect(content).toContain("#!/usr/bin/env node");
+    expect(content).toContain("PATTERNS");
+    expect(content).toContain("checkCommand");
+  });
+
+  it("makes hook script executable", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    installHook(tempDir);
+
+    const hookPath = path.join(tempDir, ".claude", "hooks", "block-dangerous-commands.js");
+    const stats = fs.statSync(hookPath);
+    // Check executable bit is set (owner)
+    expect(stats.mode & 0o100).toBeTruthy();
+  });
+
+  it("patches settings.json with hook configuration", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, ".claude", "settings.json"),
+      JSON.stringify({ permissions: { allow: [] } })
+    );
+
+    installHook(tempDir);
+
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(tempDir, ".claude", "settings.json"), "utf-8")
+    );
+    expect(settings.hooks).toBeDefined();
+    expect(settings.hooks.PreToolUse).toBeInstanceOf(Array);
+    expect(settings.hooks.PreToolUse[0].matcher).toBe("Bash");
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("block-dangerous-commands.js");
+    // Preserves existing settings
+    expect(settings.permissions).toBeDefined();
+  });
+
+  it("creates settings.json if it does not exist", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    installHook(tempDir);
+
+    const settingsPath = path.join(tempDir, ".claude", "settings.json");
+    expect(fs.existsSync(settingsPath)).toBe(true);
+
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    expect(settings.hooks.PreToolUse).toBeDefined();
+  });
+
+  it("creates hooks directory when it does not exist", () => {
+    installHook(tempDir);
+
+    const hooksDir = path.join(tempDir, ".claude", "hooks");
+    expect(fs.existsSync(hooksDir)).toBe(true);
+  });
+
+  it("generated script contains safety patterns for critical and high levels", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    installHook(tempDir);
+
+    const hookPath = path.join(tempDir, ".claude", "hooks", "block-dangerous-commands.js");
+    const content = fs.readFileSync(hookPath, "utf-8");
+    expect(content).toContain("rm-root");
+    expect(content).toContain("git-force-main");
+    expect(content).toContain("npm-publish");
+    expect(content).toContain("curl-pipe-sh");
   });
 });

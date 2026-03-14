@@ -1,0 +1,270 @@
+/**
+ * @module hooks
+ * @description Hook script generation for Claude Code safety hooks.
+ *
+ * Generates a PreToolUse hook that blocks dangerous Bash commands
+ * (destructive filesystem ops, force pushes, secrets exposure, etc.).
+ * The hook runs before every Bash tool call and denies execution of
+ * commands matching configurable safety patterns.
+ *
+ * @example
+ * import { installHook } from './hooks.js';
+ *
+ * installHook('/path/to/project');
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+
+// ============================================================================
+// Hook Script Content
+// ============================================================================
+
+/* eslint-disable no-useless-escape */
+const HOOK_SCRIPT = String.raw`#!/usr/bin/env node
+/**
+ * Block Dangerous Commands - PreToolUse Hook for Bash
+ * Blocks dangerous patterns before execution.
+ *
+ * SAFETY_LEVEL: 'critical' | 'high' | 'strict'
+ *   critical - Only catastrophic: rm -rf ~, dd to disk, fork bombs
+ *   high     - + risky: force push main, secrets exposure, git reset --hard
+ *   strict   - + cautionary: any force push, sudo rm, docker prune
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const SAFETY_LEVEL = 'high';
+
+const PATTERNS = [
+  // CRITICAL — Catastrophic, unrecoverable
+
+  // Filesystem destruction
+  { level: 'critical', id: 'rm-home',          regex: /\brm\s+(-.+\s+)*["']?~\/?["']?(\s|$|[;&|])/,                        reason: 'rm targeting home directory' },
+  { level: 'critical', id: 'rm-home-var',      regex: /\brm\s+(-.+\s+)*["']?\$HOME["']?(\s|$|[;&|])/,                      reason: 'rm targeting $HOME' },
+  { level: 'critical', id: 'rm-home-trailing', regex: /\brm\s+.+\s+["']?(~\/?|\$HOME)["']?(\s*$|[;&|])/,                   reason: 'rm with trailing ~/ or $HOME' },
+  { level: 'critical', id: 'rm-root',          regex: /\brm\s+(-.+\s+)*\/(\*|\s|$|[;&|])/,                                 reason: 'rm targeting root filesystem' },
+  { level: 'critical', id: 'rm-system',        regex: /\brm\s+(-.+\s+)*\/(etc|usr|var|bin|sbin|lib|boot|dev|proc|sys)(\/|\s|$)/, reason: 'rm targeting system directory' },
+  { level: 'critical', id: 'rm-cwd',           regex: /\brm\s+(-.+\s+)*(\.\/?|\*|\.\/\*)(\s|$|[;&|])/,                     reason: 'rm deleting current directory contents' },
+
+  // Disk operations
+  { level: 'critical', id: 'dd-disk',          regex: /\bdd\b.+of=\/dev\/(sd[a-z]|nvme|hd[a-z]|vd[a-z]|xvd[a-z])/,         reason: 'dd writing to disk device' },
+  { level: 'critical', id: 'mkfs',             regex: /\bmkfs(\.\w+)?\s+\/dev\/(sd[a-z]|nvme|hd[a-z]|vd[a-z])/,            reason: 'mkfs formatting disk' },
+  { level: 'critical', id: 'fdisk',            regex: /\b(fdisk|wipefs|parted)\s+\/dev\//,                                   reason: 'disk partitioning/wiping operation' },
+
+  // Shell exploits
+  { level: 'critical', id: 'fork-bomb',        regex: /:\(\)\s*\{.*:\s*\|\s*:.*&/,                                         reason: 'fork bomb detected' },
+
+  // Git — history destruction
+  { level: 'critical', id: 'git-filter',       regex: /\bgit\s+(filter-branch|filter-repo)\b/,                              reason: 'git history rewriting blocked' },
+  { level: 'critical', id: 'git-reflog-exp',   regex: /\bgit\s+(reflog\s+expire|gc\s+--prune|prune)\b/,                     reason: 'removes git recovery safety net' },
+
+  // HIGH — Significant risk, data loss, security exposure
+
+  // Remote code execution
+  { level: 'high', id: 'curl-pipe-sh',         regex: /\b(curl|wget)\b.+\|\s*(ba)?sh\b/,                                   reason: 'piping URL to shell (RCE risk)' },
+
+  // Git — destructive operations
+  { level: 'high', id: 'git-force-main',       regex: /\bgit\s+push\b(?!.+--force-with-lease).+(--force|-f)\b.+\b(main|master)\b/, reason: 'force push to main/master' },
+  { level: 'high', id: 'git-reset-hard',       regex: /\bgit\s+reset\s+--hard/,                                            reason: 'git reset --hard loses uncommitted work' },
+  { level: 'high', id: 'git-clean-f',          regex: /\bgit\s+clean\s+(-\w*f|-f)/,                                        reason: 'git clean -f deletes untracked files' },
+  { level: 'high', id: 'git-no-verify',        regex: /\bgit\b.+--no-verify/,                                              reason: '--no-verify skips safety hooks' },
+  { level: 'high', id: 'git-stash-destruct',   regex: /\bgit\s+stash\s+(drop|clear|pop)\b/,                                reason: 'destructive git stash operation' },
+  { level: 'high', id: 'git-branch-D',         regex: /\bgit\s+branch\s+(-D|--delete\s+--force)\b/,                        reason: 'git branch -D force-deletes branch' },
+  { level: 'high', id: 'git-checkout-force',   regex: /\bgit\s+checkout\s+(-f|--\s+\.)/,                                   reason: 'git checkout -f/-- . discards changes' },
+  { level: 'high', id: 'git-restore-destruct', regex: /\bgit\s+restore\s+(--staged\s+--worktree|\.)/,                      reason: 'git restore discards changes' },
+  { level: 'high', id: 'git-update-ref',       regex: /\bgit\s+(update-ref|symbolic-ref|replace)\b/,                       reason: 'git ref manipulation blocked' },
+  { level: 'high', id: 'git-config-global',    regex: /\bgit\s+config\s+--(global|system)\b/,                              reason: 'git global/system config blocked' },
+  { level: 'high', id: 'git-tag-delete',       regex: /\bgit\s+tag\s+(-d|--delete)\b/,                                    reason: 'git tag deletion blocked' },
+
+  // Git — write operations (user handles manually)
+  { level: 'high', id: 'git-push',             regex: /\bgit\s+push\b/,                                                    reason: 'git push blocked — user handles manually' },
+  { level: 'high', id: 'git-pull',             regex: /\bgit\s+pull\b/,                                                    reason: 'git pull blocked — user handles manually' },
+  { level: 'high', id: 'git-fetch',            regex: /\bgit\s+fetch\b/,                                                   reason: 'git fetch blocked — user handles manually' },
+  { level: 'high', id: 'git-clone',            regex: /\bgit\s+clone\b/,                                                   reason: 'git clone blocked — user handles manually' },
+  { level: 'high', id: 'git-add',              regex: /\bgit\s+(add|stage)\b/,                                             reason: 'git add/stage blocked — user handles manually' },
+  { level: 'high', id: 'git-commit',           regex: /\bgit\s+commit\b/,                                                  reason: 'git commit blocked — user handles manually' },
+  { level: 'high', id: 'git-merge',            regex: /\bgit\s+merge\b/,                                                   reason: 'git merge blocked — user handles manually' },
+  { level: 'high', id: 'git-rebase',           regex: /\bgit\s+rebase\b/,                                                  reason: 'git rebase blocked — user handles manually' },
+  { level: 'high', id: 'git-reset',            regex: /\bgit\s+reset\b/,                                                   reason: 'git reset blocked — user handles manually' },
+  { level: 'high', id: 'git-remote-mod',       regex: /\bgit\s+remote\s+(add|set-url|remove)\b/,                           reason: 'git remote modification blocked' },
+  { level: 'high', id: 'git-submodule',        regex: /\bgit\s+submodule\s+(add|update)\b/,                                reason: 'git submodule operation blocked' },
+
+  // Credentials & secrets
+  { level: 'high', id: 'chmod-777',            regex: /\bchmod\b.+\b777\b/,                                                reason: 'chmod 777 is a security risk' },
+  { level: 'high', id: 'cat-env',              regex: /\b(cat|less|head|tail|more)\s+\.env\b/,                             reason: 'reading .env file exposes secrets' },
+  { level: 'high', id: 'cat-secrets',          regex: /\b(cat|less|head|tail|more)\b.+(credentials|secrets?|\.pem|\.key|id_rsa|id_ed25519)/i, reason: 'reading secrets file' },
+  { level: 'high', id: 'env-dump',             regex: /\b(printenv|^env)\s*([;&|]|$)/,                                     reason: 'env dump may expose secrets' },
+  { level: 'high', id: 'echo-secret',          regex: /\becho\b.+\$\w*(SECRET|KEY|TOKEN|PASSWORD|API_|PRIVATE)/i,          reason: 'echoing secret variable' },
+  { level: 'high', id: 'rm-ssh',               regex: /\brm\b.+\.ssh\/(id_|authorized_keys|known_hosts)/,                  reason: 'deleting SSH keys' },
+  { level: 'high', id: 'security-keychain',    regex: /\bsecurity\s+find-generic-password\b/,                              reason: 'keychain access blocked' },
+  { level: 'high', id: 'gpg-export-secret',    regex: /\bgpg\s+--export-secret-keys\b/,                                   reason: 'GPG secret key export blocked' },
+  { level: 'high', id: 'history-cmd',          regex: /\bhistory\b/,                                                       reason: 'history may expose secrets' },
+
+  // Destructive system commands
+  { level: 'high', id: 'elevated-priv',        regex: /\b(sudo|doas|pkexec)\b/,                                            reason: 'elevated privilege command blocked' },
+  { level: 'high', id: 'su-cmd',               regex: /\bsu\b/,                                                            reason: 'su (switch user) blocked' },
+  { level: 'high', id: 'chmod-R',              regex: /\bchmod\s+(-\w*R|-R)/,                                              reason: 'recursive chmod blocked' },
+  { level: 'high', id: 'chown-R',              regex: /\bchown\s+(-\w*R|-R)/,                                              reason: 'recursive chown blocked' },
+  { level: 'high', id: 'kill-all',             regex: /\bkill\s+-9\s+-1\b/,                                                reason: 'kill all processes blocked' },
+  { level: 'high', id: 'killall',              regex: /\b(killall|pkill\s+-9)\b/,                                          reason: 'mass process killing blocked' },
+  { level: 'high', id: 'truncate-zero',        regex: /\btruncate\s+-s\s*0\b/,                                             reason: 'truncating file to zero blocked' },
+  { level: 'high', id: 'empty-file',           regex: /\bcat\s+\/dev\/null\s*>/,                                           reason: 'emptying file via /dev/null blocked' },
+  { level: 'high', id: 'crontab-r',            regex: /\bcrontab\s+-r/,                                                    reason: 'removes all cron jobs' },
+
+  // Docker
+  { level: 'high', id: 'docker-vol-rm',        regex: /\bdocker\s+volume\s+(rm|prune)/,                                    reason: 'docker volume deletion loses data' },
+  { level: 'high', id: 'docker-push',          regex: /\bdocker\s+push\b/,                                                 reason: 'docker push blocked' },
+  { level: 'high', id: 'docker-rm-all',        regex: /\bdocker\s+rm\s+-f\b.+\$\(docker\s+ps/,                             reason: 'docker rm all containers blocked' },
+  { level: 'high', id: 'docker-sys-prune-a',   regex: /\bdocker\s+system\s+prune\s+-a/,                                    reason: 'docker system prune -a blocked' },
+  { level: 'high', id: 'docker-compose-destr', regex: /\bdocker[\s-]compose\s+down\s+(-v|--rmi)/,                           reason: 'docker-compose destructive down blocked' },
+
+  // Publishing & deployment
+  { level: 'high', id: 'npm-publish',          regex: /\bnpm\s+(publish|unpublish|deprecate)\b/,                            reason: 'npm publishing blocked' },
+  { level: 'high', id: 'npm-audit-force',      regex: /\bnpm\s+audit\s+fix\s+--force\b/,                                   reason: 'npm audit fix --force can break deps' },
+  { level: 'high', id: 'cargo-publish',        regex: /\bcargo\s+publish\b/,                                               reason: 'cargo publish blocked' },
+  { level: 'high', id: 'pip-twine-upload',     regex: /\b(pip|twine)\s+upload\b/,                                          reason: 'Python package upload blocked' },
+  { level: 'high', id: 'gem-push',             regex: /\bgem\s+push\b/,                                                    reason: 'gem push blocked' },
+  { level: 'high', id: 'pod-push',             regex: /\bpod\s+trunk\s+push\b/,                                            reason: 'pod trunk push blocked' },
+  { level: 'high', id: 'vercel-prod',          regex: /\bvercel\b.+--prod/,                                                reason: 'vercel production deploy blocked' },
+  { level: 'high', id: 'netlify-prod',         regex: /\bnetlify\s+deploy\b.+--prod/,                                      reason: 'netlify production deploy blocked' },
+  { level: 'high', id: 'fly-deploy',           regex: /\bfly\s+deploy\b/,                                                  reason: 'fly deploy blocked' },
+  { level: 'high', id: 'firebase-deploy',      regex: /\bfirebase\s+deploy\b/,                                             reason: 'firebase deploy blocked' },
+  { level: 'high', id: 'terraform',            regex: /\bterraform\s+(apply|destroy)\b/,                                   reason: 'terraform apply/destroy blocked' },
+  { level: 'high', id: 'pulumi-cdktf',         regex: /\b(pulumi|cdktf)\s+destroy\b/,                                      reason: 'infrastructure destroy blocked' },
+  { level: 'high', id: 'kubectl-mutate',       regex: /\bkubectl\s+(apply|delete|drain)\b/,                                reason: 'kubectl mutating operation blocked' },
+  { level: 'high', id: 'kubectl-scale-zero',   regex: /\bkubectl\s+scale\b.+--replicas=0/,                                 reason: 'kubectl scale to zero blocked' },
+  { level: 'high', id: 'helm-ops',             regex: /\bhelm\s+(install|uninstall|upgrade)\b/,                             reason: 'helm operation blocked' },
+  { level: 'high', id: 'heroku',               regex: /\bheroku\b/,                                                        reason: 'heroku command blocked' },
+  { level: 'high', id: 'eb-terminate',         regex: /\beb\s+terminate\b/,                                                reason: 'eb terminate blocked' },
+  { level: 'high', id: 'serverless-remove',    regex: /\bserverless\s+remove\b/,                                           reason: 'serverless remove blocked' },
+  { level: 'high', id: 'cap-prod-deploy',      regex: /\bcap\s+production\s+deploy\b/,                                     reason: 'production deploy blocked' },
+  { level: 'high', id: 'cloud-delete',         regex: /\b(aws\s+cloudformation\s+delete-stack|gcloud\s+projects\s+delete|az\s+group\s+delete)\b/, reason: 'cloud resource deletion blocked' },
+
+  // Network & infrastructure
+  { level: 'high', id: 'curl-mutating',        regex: /\bcurl\b.+-X\s*(POST|PUT|DELETE|PATCH)\b/,                          reason: 'mutating HTTP request blocked' },
+  { level: 'high', id: 'ssh-remote',           regex: /\bssh\s/,                                                           reason: 'SSH remote connection blocked' },
+  { level: 'high', id: 'scp-remote',           regex: /\bscp\s/,                                                           reason: 'SCP remote copy blocked' },
+  { level: 'high', id: 'rsync-delete',         regex: /\brsync\b.+--delete/,                                               reason: 'rsync --delete blocked' },
+  { level: 'high', id: 'firewall',             regex: /\b(iptables\s+-F|ufw\s+disable)\b/,                                 reason: 'firewall manipulation blocked' },
+  { level: 'high', id: 'network-kill',         regex: /\bifconfig\s+\w+\s+down\b/,                                         reason: 'network interface down blocked' },
+  { level: 'high', id: 'route-delete',         regex: /\broute\s+del\s+default\b/,                                         reason: 'default route deletion blocked' },
+
+  // Database
+  { level: 'high', id: 'sql-drop',             regex: /\b(DROP\s+(DATABASE|TABLE)|TRUNCATE\s+TABLE)\b/i,                   reason: 'SQL drop/truncate blocked' },
+  { level: 'high', id: 'sql-mass-delete',      regex: /\bDELETE\s+FROM\b.+\bWHERE\s+1\s*=\s*1/i,                          reason: 'SQL mass delete blocked' },
+  { level: 'high', id: 'redis-flush',          regex: /\bredis-cli\s+(FLUSHALL|FLUSHDB)\b/,                                reason: 'redis flush blocked' },
+  { level: 'high', id: 'orm-reset',            regex: /\b(prisma\s+migrate\s+reset|rails\s+db:(drop|reset)|django\s+flush)\b/, reason: 'ORM database reset blocked' },
+  { level: 'high', id: 'alembic-downgrade',    regex: /\balembic\s+downgrade\s+base\b/,                                    reason: 'alembic downgrade base blocked' },
+  { level: 'high', id: 'mongo-drop',           regex: /\bmongosh\b.+dropDatabase/,                                         reason: 'MongoDB drop database blocked' },
+
+  // STRICT — Cautionary, context-dependent
+  { level: 'strict', id: 'git-checkout-dot',    regex: /\bgit\s+checkout\s+\./,                                             reason: 'git checkout . discards changes' },
+  { level: 'strict', id: 'docker-prune',        regex: /\bdocker\s+(system|image)\s+prune/,                                 reason: 'docker prune removes images' },
+];
+
+const LEVELS = { critical: 1, high: 2, strict: 3 };
+const EMOJIS = { critical: '\u{1F6A8}', high: '\u26D4', strict: '\u26A0\uFE0F' };
+const LOG_DIR = path.join(process.env.HOME || '/tmp', '.claude', 'hooks-logs');
+
+function log(data) {
+  try {
+    if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+    const file = path.join(LOG_DIR, new Date().toISOString().slice(0, 10) + '.jsonl');
+    fs.appendFileSync(file, JSON.stringify({ ts: new Date().toISOString(), ...data }) + '\n');
+  } catch {}
+}
+
+function checkCommand(cmd, safetyLevel) {
+  safetyLevel = safetyLevel || SAFETY_LEVEL;
+  const threshold = LEVELS[safetyLevel] || 2;
+  for (const p of PATTERNS) {
+    if (LEVELS[p.level] <= threshold && p.regex.test(cmd)) {
+      return { blocked: true, pattern: p };
+    }
+  }
+  return { blocked: false, pattern: null };
+}
+
+async function main() {
+  let input = '';
+  for await (const chunk of process.stdin) input += chunk;
+
+  try {
+    const data = JSON.parse(input);
+    const { tool_name, tool_input, session_id, cwd, permission_mode } = data;
+    if (tool_name !== 'Bash') return console.log('{}');
+
+    const cmd = tool_input?.command || '';
+    const result = checkCommand(cmd);
+
+    if (result.blocked) {
+      const p = result.pattern;
+      log({ level: 'BLOCKED', id: p.id, priority: p.level, cmd, session_id, cwd, permission_mode });
+      return console.log(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: EMOJIS[p.level] + ' [' + p.id + '] ' + p.reason
+        }
+      }));
+    }
+    console.log('{}');
+  } catch (e) {
+    log({ level: 'ERROR', error: e.message });
+    console.log('{}');
+  }
+}
+
+if (require.main === module) {
+  main();
+} else {
+  module.exports = { PATTERNS, LEVELS, SAFETY_LEVEL, checkCommand };
+}
+`;
+
+// ============================================================================
+// Hook Installation
+// ============================================================================
+
+/**
+ * Install the dangerous command hook into a project's .claude/ directory.
+ * Creates the hook script and patches settings.json with the hook configuration.
+ */
+export function installHook(rootDir: string): void {
+  const hooksDir = path.join(rootDir, ".claude", "hooks");
+  const hookPath = path.join(hooksDir, "block-dangerous-commands.js");
+  const settingsPath = path.join(rootDir, ".claude", "settings.json");
+
+  // Write hook script
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(hookPath, HOOK_SCRIPT);
+  fs.chmodSync(hookPath, 0o755);
+
+  // Patch settings.json with hook configuration
+  try {
+    const existing = fs.existsSync(settingsPath)
+      ? JSON.parse(fs.readFileSync(settingsPath, "utf-8"))
+      : {};
+
+    existing.hooks = {
+      ...existing.hooks,
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command",
+              command: "node .claude/hooks/block-dangerous-commands.js",
+            },
+          ],
+        },
+      ],
+    };
+
+    fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2));
+  } catch {
+    // Settings patch failed — hook script was still written
+  }
+}
