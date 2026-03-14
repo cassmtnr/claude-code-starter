@@ -730,7 +730,7 @@ async function main(): Promise<void> {
       const { proceed } = await prompts({
         type: "confirm",
         name: "proceed",
-        message: "Update existing configuration? (preserves task state)",
+        message: "Update existing configuration?",
         initial: true,
       });
 
