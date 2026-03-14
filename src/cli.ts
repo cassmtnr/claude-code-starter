@@ -66,11 +66,47 @@ export function parseArgs(args: string[]): Args {
     force: args.includes("-f") || args.includes("--force"),
     interactive: !args.includes("--no-interactive") && !args.includes("-y"),
     verbose: args.includes("--verbose") || args.includes("-V"),
+    refresh: args.includes("--refresh"),
   };
 }
 
 export function getVersion(): string {
   return VERSION;
+}
+
+/**
+ * Compare two semver strings (major.minor.patch).
+ * Returns true if `latest` is newer than `current`.
+ */
+export function isNewerVersion(current: string, latest: string): boolean {
+  const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
+  const [cMajor, cMinor, cPatch] = parse(current);
+  const [lMajor, lMinor, lPatch] = parse(latest);
+  if (lMajor !== cMajor) return lMajor > cMajor;
+  if (lMinor !== cMinor) return lMinor > cMinor;
+  return lPatch > cPatch;
+}
+
+/**
+ * Check npm registry for a newer version and print an update notice if found.
+ * Silently ignores failures (network errors, timeouts).
+ */
+export function checkForUpdate(): void {
+  try {
+    const latest = execSync("npm view claude-code-starter version", {
+      encoding: "utf-8",
+      timeout: 5000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+
+    if (latest && isNewerVersion(VERSION, latest)) {
+      console.log(pc.yellow(`  Update available: ${VERSION} → ${latest}`));
+      console.log(pc.yellow("  Run: npm install -g claude-code-starter@latest"));
+      console.log();
+    }
+  } catch {
+    // Network error or timeout — skip silently
+  }
 }
 
 // ============================================================================
@@ -92,6 +128,7 @@ ${pc.bold("OPTIONS")}
   -f, --force         Force overwrite existing .claude files
   -y, --no-interactive  Skip interactive prompts (use defaults)
   -V, --verbose       Show detailed output
+  --refresh           Refresh settings.json, hooks, and statusline without re-running Claude analysis
 
 ${pc.bold("WHAT IT DOES")}
   1. Analyzes your repository's tech stack
@@ -729,6 +766,7 @@ async function main(): Promise<void> {
   }
 
   showBanner();
+  checkForUpdate();
 
   const projectDir = process.cwd();
 
@@ -740,6 +778,26 @@ async function main(): Promise<void> {
 
   // Show tech stack analysis
   showTechStack(projectInfo, args.verbose);
+
+  // Tools-only mode: write settings + extras, skip Claude analysis
+  if (args.refresh) {
+    console.log(pc.gray("Setting up .claude/ directory structure..."));
+    console.log();
+
+    writeSettings(projectDir, projectInfo.techStack);
+    ensureDirectories(projectDir);
+
+    console.log(pc.green("Updated:"));
+    console.log(pc.green("  + .claude/settings.json"));
+    console.log();
+
+    await promptExtras(projectDir);
+
+    console.log();
+    console.log(pc.green("Done!"));
+    console.log();
+    return;
+  }
 
   // Step 2: Handle new projects
   let preferences: NewProjectPreferences | null = null;

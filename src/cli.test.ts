@@ -141,6 +141,7 @@ describe("promptNewProject", () => {
       force: false,
       interactive: false,
       verbose: false,
+      refresh: false,
     };
     const result = await promptNewProject(args);
     expect(result).toBeNull();
@@ -171,6 +172,7 @@ describe("promptNewProject", () => {
       force: false,
       interactive: true,
       verbose: false,
+      refresh: false,
     };
 
     const result = await mockedPrompt(args);
@@ -198,6 +200,7 @@ describe("promptNewProject", () => {
       force: false,
       interactive: true,
       verbose: false,
+      refresh: false,
     };
 
     const result = await mockedPrompt(args);
@@ -227,6 +230,7 @@ describe("promptNewProject", () => {
       force: false,
       interactive: true,
       verbose: false,
+      refresh: false,
     };
 
     const result = await mockedPrompt(args);
@@ -257,6 +261,7 @@ describe("promptNewProject", () => {
       force: false,
       interactive: true,
       verbose: false,
+      refresh: false,
     };
 
     const result = await mockedPrompt(args);

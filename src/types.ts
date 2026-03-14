@@ -24,6 +24,7 @@ export interface Args {
   force: boolean;
   interactive: boolean;
   verbose: boolean;
+  refresh: boolean;
 }
 
 /**
