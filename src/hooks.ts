@@ -1,16 +1,15 @@
 /**
  * @module hooks
- * @description Hook script generation for Claude Code safety hooks.
+ * @description Optional extras for Claude Code projects: safety hooks and statusline.
  *
- * Generates a PreToolUse hook that blocks dangerous Bash commands
- * (destructive filesystem ops, force pushes, secrets exposure, etc.).
- * The hook runs before every Bash tool call and denies execution of
- * commands matching configurable safety patterns.
+ * - Safety hook: PreToolUse hook that blocks dangerous Bash commands
+ * - Statusline: Custom status bar showing project, branch, context, model
  *
  * @example
- * import { installHook } from './hooks.js';
+ * import { installHook, installStatusline } from './hooks.js';
  *
  * installHook('/path/to/project');
+ * installStatusline('/path/to/project');
  */
 
 import fs from "node:fs";
@@ -229,6 +228,48 @@ if (require.main === module) {
 // ============================================================================
 
 /**
+ * Status of existing hook installations
+ */
+export interface HookStatus {
+  projectInstalled: boolean;
+  globalInstalled: boolean;
+  projectMatchesOurs: boolean;
+  globalMatchesOurs: boolean;
+}
+
+/**
+ * Check if the safety hook is already installed at project and global level.
+ */
+export function checkHookStatus(rootDir: string): HookStatus {
+  const homeDir = process.env.HOME || "";
+  const projectScriptPath = path.join(rootDir, ".claude", "hooks", "block-dangerous-commands.js");
+  const globalScriptPath = path.join(homeDir, ".claude", "hooks", "block-dangerous-commands.js");
+
+  const result: HookStatus = {
+    projectInstalled: false,
+    globalInstalled: false,
+    projectMatchesOurs: false,
+    globalMatchesOurs: false,
+  };
+
+  // Check project-level
+  if (fs.existsSync(projectScriptPath)) {
+    result.projectInstalled = true;
+    const content = fs.readFileSync(projectScriptPath, "utf-8");
+    result.projectMatchesOurs = content.trim() === HOOK_SCRIPT.trim();
+  }
+
+  // Check global-level
+  if (fs.existsSync(globalScriptPath)) {
+    result.globalInstalled = true;
+    const content = fs.readFileSync(globalScriptPath, "utf-8");
+    result.globalMatchesOurs = content.trim() === HOOK_SCRIPT.trim();
+  }
+
+  return result;
+}
+
+/**
  * Install the dangerous command hook into a project's .claude/ directory.
  * Creates the hook script and patches settings.json with the hook configuration.
  */
@@ -248,23 +289,282 @@ export function installHook(rootDir: string): void {
       ? JSON.parse(fs.readFileSync(settingsPath, "utf-8"))
       : {};
 
-    existing.hooks = {
-      ...existing.hooks,
-      PreToolUse: [
+    const newEntry = {
+      matcher: "Bash",
+      hooks: [
         {
-          matcher: "Bash",
-          hooks: [
-            {
-              type: "command",
-              command: "node .claude/hooks/block-dangerous-commands.js",
-            },
-          ],
+          type: "command",
+          command: "node .claude/hooks/block-dangerous-commands.js",
         },
       ],
     };
 
+    const existingPreToolUse = Array.isArray(existing.hooks?.PreToolUse)
+      ? existing.hooks.PreToolUse
+      : [];
+
+    const alreadyInstalled = existingPreToolUse.some(
+      (e: { hooks?: { command?: string }[] }) =>
+        Array.isArray(e.hooks) &&
+        e.hooks.some((h) => h.command?.includes("block-dangerous-commands.js"))
+    );
+
+    existing.hooks = {
+      ...existing.hooks,
+      PreToolUse: alreadyInstalled ? existingPreToolUse : [...existingPreToolUse, newEntry],
+    };
+
     fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "unknown error";
+    console.error(`  Warning: could not patch settings.json (${msg}) — add hook config manually`);
+  }
+}
+
+/**
+ * Install the dangerous command hook globally (~/.claude/).
+ */
+export function installHookGlobal(): void {
+  const homeDir = process.env.HOME || "";
+  const hooksDir = path.join(homeDir, ".claude", "hooks");
+  const hookPath = path.join(hooksDir, "block-dangerous-commands.js");
+  const settingsPath = path.join(homeDir, ".claude", "settings.json");
+
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(hookPath, HOOK_SCRIPT);
+  fs.chmodSync(hookPath, 0o755);
+
+  try {
+    const existing = fs.existsSync(settingsPath)
+      ? JSON.parse(fs.readFileSync(settingsPath, "utf-8"))
+      : {};
+
+    const newEntry = {
+      matcher: "Bash",
+      hooks: [{ type: "command", command: "node ~/.claude/hooks/block-dangerous-commands.js" }],
+    };
+
+    const existingPreToolUse = Array.isArray(existing.hooks?.PreToolUse)
+      ? existing.hooks.PreToolUse
+      : [];
+
+    const alreadyInstalled = existingPreToolUse.some(
+      (e: { hooks?: { command?: string }[] }) =>
+        Array.isArray(e.hooks) &&
+        e.hooks.some((h) => h.command?.includes("block-dangerous-commands.js"))
+    );
+
+    existing.hooks = {
+      ...existing.hooks,
+      PreToolUse: alreadyInstalled ? existingPreToolUse : [...existingPreToolUse, newEntry],
+    };
+
+    fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "unknown error";
+    console.error(`  Warning: could not patch settings.json (${msg}) — add hook config manually`);
+  }
+}
+
+// ============================================================================
+// Statusline Script Content
+// ============================================================================
+
+// Statusline as a line array — avoids bash ${VAR} conflicting with JS template literals
+const STATUSLINE_SCRIPT = [
+  "#!/usr/bin/env bash",
+  "# Claude Code statusline \u2014 portable, no runtime dependency beyond jq",
+  "",
+  "set -euo pipefail",
+  "",
+  "# Colors (using $'...' so escapes resolve at assignment, not at output time)",
+  "RST=$'\\033[0m'",
+  "CYAN=$'\\033[36m'",
+  "MAGENTA=$'\\033[35m'",
+  "BLUE=$'\\033[34m'",
+  "GREEN=$'\\033[32m'",
+  "YELLOW=$'\\033[33m'",
+  "RED=$'\\033[31m'",
+  "",
+  "# Read JSON from stdin (Claude Code pipes session data)",
+  'INPUT="$(cat)"',
+  "",
+  "# Parse fields with jq",
+  'CWD="$(echo "$INPUT" | jq -r \'.workspace.current_dir // .cwd // ""\')"',
+  'PROJECT="$(basename "$CWD")"',
+  'SESSION_ID="$(echo "$INPUT" | jq -r \'.session_id // empty\')"',
+  'SESSION_NAME="$(echo "$INPUT" | jq -r \'.session_name // empty\')"',
+  'REMAINING="$(echo "$INPUT" | jq -r \'.context_window.remaining_percentage // empty\')"',
+  'MODEL="$(echo "$INPUT" | jq -r \'.model.display_name // empty\')"',
+  "",
+  "# Line 1: [user] project [on branch]",
+  'LINE1=""',
+  'if [[ -n "${SSH_CONNECTION:-}" ]]; then',
+  '    LINE1+="${BLUE}$(whoami)${RST} "',
+  "fi",
+  'LINE1+="${CYAN}${PROJECT}${RST}"',
+  "",
+  'BRANCH="$(git branch --show-current 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || true)"',
+  'if [[ -n "$BRANCH" ]]; then',
+  '    LINE1+=" on ${MAGENTA}\u{1F331} ${BRANCH}${RST}"',
+  "fi",
+  "",
+  "# Line 2: session + context + model",
+  'PARTS=""',
+  'if [[ -n "$SESSION_ID" ]]; then',
+  '    if [[ -n "$SESSION_NAME" ]]; then',
+  '        PARTS+="${MAGENTA}${SESSION_NAME} \u00B7 sid: ${SESSION_ID}${RST}"',
+  "    else",
+  '        PARTS+="${MAGENTA}sid: ${SESSION_ID}${RST}"',
+  "    fi",
+  "fi",
+  "",
+  'if [[ -n "$REMAINING" ]]; then',
+  '    RND="${REMAINING%%.*}"',
+  "    if (( RND < 20 )); then",
+  '        CTX_COLOR="$RED"',
+  "    elif (( RND < 50 )); then",
+  '        CTX_COLOR="$YELLOW"',
+  "    else",
+  '        CTX_COLOR="$GREEN"',
+  "    fi",
+  '    [[ -n "$PARTS" ]] && PARTS+=" "',
+  '    PARTS+="${CTX_COLOR}[ctx: ${RND}%]${RST}"',
+  "fi",
+  "",
+  'if [[ -n "$MODEL" ]]; then',
+  '    [[ -n "$PARTS" ]] && PARTS+=" "',
+  '    PARTS+="[${CYAN}${MODEL}${RST}]"',
+  "fi",
+  "",
+  'echo "$LINE1"',
+  'echo "$PARTS"',
+].join("\n");
+
+// ============================================================================
+// Statusline Installation
+// ============================================================================
+
+/**
+ * Status of existing statusline installations
+ */
+export interface StatuslineStatus {
+  projectInstalled: boolean;
+  globalInstalled: boolean;
+  projectMatchesOurs: boolean;
+  globalMatchesOurs: boolean;
+}
+
+/**
+ * Check if a statusline is already installed at project and global level.
+ * Compares the script content to determine if it matches our version.
+ */
+export function checkStatuslineStatus(rootDir: string): StatuslineStatus {
+  const homeDir = process.env.HOME || "";
+  const projectScriptPath = path.join(rootDir, ".claude", "config", "statusline-command.sh");
+  const globalScriptPath = path.join(homeDir, ".claude", "config", "statusline-command.sh");
+  const projectSettingsPath = path.join(rootDir, ".claude", "settings.json");
+  const globalSettingsPath = path.join(homeDir, ".claude", "settings.json");
+
+  const result: StatuslineStatus = {
+    projectInstalled: false,
+    globalInstalled: false,
+    projectMatchesOurs: false,
+    globalMatchesOurs: false,
+  };
+
+  // Check project-level
+  try {
+    if (fs.existsSync(projectSettingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(projectSettingsPath, "utf-8"));
+      if (settings.statusLine?.command) {
+        result.projectInstalled = true;
+        if (fs.existsSync(projectScriptPath)) {
+          const content = fs.readFileSync(projectScriptPath, "utf-8");
+          result.projectMatchesOurs = content.trim() === STATUSLINE_SCRIPT.trim();
+        }
+      }
+    }
   } catch {
-    // Settings patch failed — hook script was still written
+    // Ignore parse errors
+  }
+
+  // Check global-level
+  try {
+    if (fs.existsSync(globalSettingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(globalSettingsPath, "utf-8"));
+      if (settings.statusLine?.command) {
+        result.globalInstalled = true;
+        if (fs.existsSync(globalScriptPath)) {
+          const content = fs.readFileSync(globalScriptPath, "utf-8");
+          result.globalMatchesOurs = content.trim() === STATUSLINE_SCRIPT.trim();
+        }
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+
+  return result;
+}
+
+/**
+ * Install the statusline script into a project's .claude/ directory.
+ * Creates the script and patches settings.json with the statusLine configuration.
+ */
+export function installStatusline(rootDir: string): void {
+  const configDir = path.join(rootDir, ".claude", "config");
+  const scriptPath = path.join(configDir, "statusline-command.sh");
+  const settingsPath = path.join(rootDir, ".claude", "settings.json");
+
+  // Write statusline script
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(scriptPath, STATUSLINE_SCRIPT);
+  fs.chmodSync(scriptPath, 0o755);
+
+  // Patch settings.json with statusLine configuration
+  patchSettings(settingsPath, {
+    statusLine: { type: "command", command: "bash .claude/config/statusline-command.sh" },
+  });
+}
+
+/**
+ * Install the statusline script globally (~/.claude/).
+ * Creates the script and patches ~/.claude/settings.json.
+ */
+export function installStatuslineGlobal(): void {
+  const homeDir = process.env.HOME || "";
+  const configDir = path.join(homeDir, ".claude", "config");
+  const scriptPath = path.join(configDir, "statusline-command.sh");
+  const settingsPath = path.join(homeDir, ".claude", "settings.json");
+
+  // Write statusline script
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(scriptPath, STATUSLINE_SCRIPT);
+  fs.chmodSync(scriptPath, 0o755);
+
+  // Patch settings.json with statusLine configuration
+  patchSettings(settingsPath, {
+    statusLine: { type: "command", command: "bash ~/.claude/config/statusline-command.sh" },
+  });
+}
+
+/**
+ * Patch a settings.json file by merging the given keys.
+ */
+function patchSettings(settingsPath: string, patch: Record<string, unknown>): void {
+  try {
+    const existing = fs.existsSync(settingsPath)
+      ? JSON.parse(fs.readFileSync(settingsPath, "utf-8"))
+      : {};
+
+    Object.assign(existing, patch);
+
+    fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "unknown error";
+    console.error(
+      `  Warning: could not patch settings.json (${msg}) — add statusLine config manually`
+    );
   }
 }
