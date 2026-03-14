@@ -17,11 +17,23 @@
 import type { ProjectInfo, TechStack } from "./types.js";
 
 /**
+ * Options controlling how CLAUDE.md is handled during generation
+ */
+export interface ClaudeMdPromptOptions {
+  claudeMdMode: "keep" | "improve" | "replace";
+  existingClaudeMd: string | null;
+}
+
+/**
  * Build the full analysis prompt with pre-detected tech stack context
  */
-export function getAnalysisPrompt(projectInfo: ProjectInfo): string {
+export function getAnalysisPrompt(
+  projectInfo: ProjectInfo,
+  options: ClaudeMdPromptOptions = { claudeMdMode: "replace", existingClaudeMd: null }
+): string {
   const context = buildContextSection(projectInfo);
   const templateVars = buildTemplateVariables(projectInfo);
+  const claudeMdInstructions = buildClaudeMdInstructions(options);
 
   return `${ANALYSIS_PROMPT}
 
@@ -46,15 +58,17 @@ ${context}
 
 ${templateVars}
 
+${claudeMdInstructions}
+
 ---
 
 ## Execute Now
 
 1. Read this entire prompt to understand all phases
 2. Execute Phase 1 completely - read files, analyze code, gather all data
-3. Execute Phase 2 - generate the CLAUDE.md (max 120 lines) using only discovered information
+${options.claudeMdMode === "keep" ? `3. Skip CLAUDE.md generation — the existing file is being kept as-is` : options.claudeMdMode === "improve" ? `3. Execute Phase 2 — IMPROVE the existing CLAUDE.md (see Improvement Mode instructions above)` : `3. Execute Phase 2 - generate the CLAUDE.md (max 120 lines) using only discovered information`}
 4. Execute Phase 3 - verify quality before writing
-5. Use the Write tool to create \`.claude/CLAUDE.md\` with the final content
+${options.claudeMdMode === "keep" ? `5. Skip writing CLAUDE.md — it is being preserved` : `5. Use the Write tool to create \`.claude/CLAUDE.md\` with the final content`}
 6. Execute Phase 4 - generate ALL skill files (4 core + framework-specific if detected)
 7. Execute Phase 5 - generate agent files
 8. Execute Phase 6 - generate rule files
@@ -64,6 +78,48 @@ ${templateVars}
 
 Do NOT output file contents to stdout. Write all files to disk using the Write tool.
 Generate ALL files in a single pass — do not stop after CLAUDE.md.`;
+}
+
+/**
+ * Build CLAUDE.md mode-specific instructions
+ */
+function buildClaudeMdInstructions(options: ClaudeMdPromptOptions): string {
+  if (options.claudeMdMode === "keep") {
+    return `---
+
+## CLAUDE.md Mode: KEEP
+
+The user chose to keep their existing CLAUDE.md unchanged.
+**Do NOT read, modify, or overwrite \`.claude/CLAUDE.md\`.**
+Generate all other files (skills, agents, rules, commands) normally.
+Use the existing CLAUDE.md as the source of truth for cross-references.`;
+  }
+
+  if (options.claudeMdMode === "improve" && options.existingClaudeMd) {
+    return `---
+
+## CLAUDE.md Mode: IMPROVE
+
+The user has an existing CLAUDE.md and wants it improved, not replaced.
+Here is the current content:
+
+\`\`\`markdown
+${options.existingClaudeMd}
+\`\`\`
+
+### Improvement Rules
+
+1. **Preserve all manually-added content** — sections, notes, and custom rules the user wrote
+2. **Enhance with discovered information** — fill gaps, add missing sections, improve specificity
+3. **Fix generic content** — replace boilerplate with project-specific details found during Phase 1
+4. **Update stale references** — fix file paths, commands, or patterns that no longer match the codebase
+5. **Respect the 120-line cap** — if the file is already near the limit, prioritize density over additions
+6. **Keep the user's structure** — if they organized sections differently from the template, keep their layout
+7. **Do NOT remove content you don't understand** — if a section seems custom or domain-specific, preserve it`;
+  }
+
+  // Default: replace mode — no extra instructions needed
+  return "";
 }
 
 function buildContextSection(projectInfo: ProjectInfo): string {

@@ -15,8 +15,9 @@ import {
   showHelp,
   showTechStack,
 } from "./cli.js";
+import { applyAction, EXTRAS } from "./extras.js";
 import { ensureDirectories, generateSettings, writeSettings } from "./generator.js";
-import { installHook } from "./hooks.js";
+import { checkHookStatus, checkStatuslineStatus, installHook, installStatusline } from "./hooks.js";
 import { getAnalysisPrompt } from "./prompt.js";
 import {
   extractCommands,
@@ -839,6 +840,100 @@ dependencies {
     expect(stack.cicdPlatform).toBe("github-actions");
   });
 
+  it("detects multiple languages in a single project", () => {
+    fs.writeFileSync(path.join(tempDir, "tsconfig.json"), "{}");
+    fs.writeFileSync(path.join(tempDir, "requirements.txt"), "fastapi");
+    fs.writeFileSync(path.join(tempDir, "go.mod"), "module test");
+    const stack = detectTechStack(tempDir);
+    expect(stack.languages).toContain("typescript");
+    expect(stack.languages).toContain("python");
+    expect(stack.languages).toContain("go");
+    expect(stack.languages.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("sets first detected framework as primary", () => {
+    fs.writeFileSync(
+      path.join(tempDir, "package.json"),
+      JSON.stringify({ dependencies: { next: "14.0.0", tailwindcss: "3.0.0" } })
+    );
+    const stack = detectTechStack(tempDir);
+    expect(stack.frameworks).toContain("nextjs");
+    expect(stack.frameworks).toContain("tailwind");
+    expect(stack.primaryFramework).toBe("nextjs");
+  });
+
+  it("prefers bun lock file when multiple lock files exist", () => {
+    fs.writeFileSync(path.join(tempDir, "bun.lock"), "");
+    fs.writeFileSync(path.join(tempDir, "package-lock.json"), "{}");
+    fs.writeFileSync(path.join(tempDir, "yarn.lock"), "");
+    const stack = detectTechStack(tempDir);
+    expect(stack.packageManager).toBe("bun");
+  });
+
+  it("detects yarn when only yarn.lock exists", () => {
+    fs.writeFileSync(path.join(tempDir, "yarn.lock"), "");
+    const stack = detectTechStack(tempDir);
+    expect(stack.packageManager).toBe("yarn");
+  });
+
+  it("prioritizes GitHub Actions over other CI/CD platforms", () => {
+    const workflowDir = path.join(tempDir, ".github", "workflows");
+    fs.mkdirSync(workflowDir, { recursive: true });
+    fs.writeFileSync(path.join(workflowDir, "ci.yml"), "name: CI");
+    fs.writeFileSync(path.join(tempDir, ".gitlab-ci.yml"), "stages: [build]");
+    const stack = detectTechStack(tempDir);
+    expect(stack.cicdPlatform).toBe("github-actions");
+  });
+
+  it("detects GitLab CI when no GitHub Actions", () => {
+    fs.writeFileSync(path.join(tempDir, ".gitlab-ci.yml"), "stages: [build]");
+    const stack = detectTechStack(tempDir);
+    expect(stack.hasCICD).toBe(true);
+    expect(stack.cicdPlatform).toBe("gitlab-ci");
+  });
+
+  it("detects biome as both linter and formatter", () => {
+    fs.writeFileSync(path.join(tempDir, "biome.json"), "{}");
+    const stack = detectTechStack(tempDir);
+    expect(stack.linter).toBe("biome");
+    expect(stack.formatter).toBe("biome");
+  });
+
+  it("handles corrupted package.json gracefully", () => {
+    fs.writeFileSync(path.join(tempDir, "package.json"), "{ invalid json");
+    expect(() => detectTechStack(tempDir)).not.toThrow();
+    const stack = detectTechStack(tempDir);
+    expect(stack.primaryFramework).toBeNull();
+  });
+
+  it("detects rspec from .rspec file", () => {
+    fs.writeFileSync(path.join(tempDir, ".rspec"), "--color");
+    const stack = detectTechStack(tempDir);
+    expect(stack.testingFramework).toBe("rspec");
+  });
+
+  it("detects rspec from Gemfile + spec directory", () => {
+    fs.writeFileSync(path.join(tempDir, "Gemfile"), 'source "https://rubygems.org"');
+    fs.mkdirSync(path.join(tempDir, "spec"));
+    const stack = detectTechStack(tempDir);
+    expect(stack.testingFramework).toBe("rspec");
+  });
+
+  it("does not detect rspec from spec directory without Gemfile", () => {
+    fs.mkdirSync(path.join(tempDir, "spec"));
+    const stack = detectTechStack(tempDir);
+    expect(stack.testingFramework).not.toBe("rspec");
+  });
+
+  it("detects playwright testing framework", () => {
+    fs.writeFileSync(
+      path.join(tempDir, "package.json"),
+      JSON.stringify({ devDependencies: { "@playwright/test": "1.0.0" } })
+    );
+    const stack = detectTechStack(tempDir);
+    expect(stack.testingFramework).toBe("playwright");
+  });
+
   it("detects existing Claude configuration", () => {
     const claudeDir = path.join(tempDir, ".claude");
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -866,6 +961,27 @@ describe("summarizeTechStack", () => {
       expect(summary).toContain("nextjs");
       expect(summary).toContain("bun");
       expect(summary).toContain("vitest");
+    } finally {
+      removeTempDir(tempDir);
+    }
+  });
+
+  it("summarizes a minimal stack with no framework or tools", () => {
+    const tempDir = createTempDir();
+    try {
+      const stack = detectTechStack(tempDir);
+      const testStack = {
+        ...stack,
+        languages: ["python" as const],
+        primaryLanguage: "python" as const,
+        primaryFramework: null,
+        packageManager: null,
+        testingFramework: null,
+      };
+      const summary = summarizeTechStack(testStack);
+      expect(summary).toContain("python");
+      expect(summary).not.toContain("undefined");
+      expect(summary).not.toContain("null");
     } finally {
       removeTempDir(tempDir);
     }
@@ -987,6 +1103,76 @@ describe("generateSettings", () => {
     }
   });
 
+  it("includes TypeScript/JavaScript permissions", () => {
+    const tempDir = createTempDir();
+    try {
+      fs.writeFileSync(path.join(tempDir, "tsconfig.json"), "{}");
+      const stack = detectTechStack(tempDir);
+      const result = generateSettings(stack);
+      expect(result.content).toContain("node");
+      expect(result.content).toContain("tsc");
+    } finally {
+      removeTempDir(tempDir);
+    }
+  });
+
+  it("includes Ruby permissions for Ruby projects", () => {
+    const tempDir = createTempDir();
+    try {
+      fs.writeFileSync(path.join(tempDir, "Gemfile"), 'source "https://rubygems.org"');
+      const stack = detectTechStack(tempDir);
+      const result = generateSettings(stack);
+      expect(result.content).toContain("ruby");
+      expect(result.content).toContain("bundle");
+      expect(result.content).toContain("rails");
+      expect(result.content).toContain("rake");
+    } finally {
+      removeTempDir(tempDir);
+    }
+  });
+
+  it("includes testing framework permissions for playwright", () => {
+    const tempDir = createTempDir();
+    try {
+      fs.writeFileSync(
+        path.join(tempDir, "package.json"),
+        JSON.stringify({ devDependencies: { "@playwright/test": "1.0.0" } })
+      );
+      const stack = detectTechStack(tempDir);
+      const result = generateSettings(stack);
+      expect(result.content).toContain("playwright");
+    } finally {
+      removeTempDir(tempDir);
+    }
+  });
+
+  it("includes linter and formatter permissions", () => {
+    const tempDir = createTempDir();
+    try {
+      fs.writeFileSync(path.join(tempDir, "eslint.config.js"), "export default {};");
+      fs.writeFileSync(path.join(tempDir, ".prettierrc"), "{}");
+      const stack = detectTechStack(tempDir);
+      const result = generateSettings(stack);
+      expect(result.content).toContain("eslint");
+      expect(result.content).toContain("prettier");
+    } finally {
+      removeTempDir(tempDir);
+    }
+  });
+
+  it("deduplicates permissions", () => {
+    const tempDir = createTempDir();
+    try {
+      const stack = detectTechStack(tempDir);
+      const result = generateSettings(stack);
+      const parsed = JSON.parse(result.content);
+      const uniqueCount = new Set(parsed.permissions.allow).size;
+      expect(parsed.permissions.allow.length).toBe(uniqueCount);
+    } finally {
+      removeTempDir(tempDir);
+    }
+  });
+
   it("includes Docker permissions when Docker is present", () => {
     const tempDir = createTempDir();
     try {
@@ -1067,6 +1253,26 @@ describe("parseArgs - no static flag", () => {
   it("does not have a static property", () => {
     const args = parseArgs([]);
     expect("static" in args).toBe(false);
+  });
+});
+
+// ============================================================================
+// CLI Interactive Prompts Integration Tests
+// ============================================================================
+
+describe("CLI interactive prompts wiring", () => {
+  const cliSource = fs.readFileSync(path.join(__dirname, "cli.ts"), "utf-8");
+
+  it("delegates extras to promptExtras in interactive mode", () => {
+    expect(cliSource).toContain("promptExtras(projectDir)");
+    expect(cliSource).toContain("if (args.interactive)");
+  });
+
+  it("prompts for CLAUDE.md mode when existing config detected", () => {
+    expect(cliSource).toContain("How should we handle the existing CLAUDE.md?");
+    expect(cliSource).toContain("Improve");
+    expect(cliSource).toContain("Replace");
+    expect(cliSource).toContain("Keep");
   });
 });
 
@@ -1239,6 +1445,59 @@ describe("getAnalysisPrompt", () => {
     expect(prompt).toContain("Do NOT generate task management commands");
     expect(prompt).toContain("built-in TaskCreate/TaskUpdate/TaskList");
   });
+
+  it("defaults to replace mode with no extra instructions", () => {
+    const prompt = getAnalysisPrompt(projectInfo);
+    expect(prompt).not.toContain("Mode: KEEP");
+    expect(prompt).not.toContain("Mode: IMPROVE");
+    expect(prompt).toContain("generate the CLAUDE.md (max 120 lines)");
+  });
+
+  it("includes keep mode instructions when mode is keep", () => {
+    const prompt = getAnalysisPrompt(projectInfo, {
+      claudeMdMode: "keep",
+      existingClaudeMd: null,
+    });
+    expect(prompt).toContain("Mode: KEEP");
+    expect(prompt).toContain("Do NOT read, modify, or overwrite");
+    expect(prompt).toContain("Skip CLAUDE.md generation");
+    expect(prompt).toContain("Skip writing CLAUDE.md");
+  });
+
+  it("includes improve mode instructions with existing content", () => {
+    const existing = "# My Project\n\n## Overview\n\nCustom content here.\n";
+    const prompt = getAnalysisPrompt(projectInfo, {
+      claudeMdMode: "improve",
+      existingClaudeMd: existing,
+    });
+    expect(prompt).toContain("Mode: IMPROVE");
+    expect(prompt).toContain("Custom content here.");
+    expect(prompt).toContain("Preserve all manually-added content");
+    expect(prompt).toContain("IMPROVE the existing CLAUDE.md");
+  });
+
+  it("falls back to no extra instructions when improve mode has null content", () => {
+    const prompt = getAnalysisPrompt(projectInfo, {
+      claudeMdMode: "improve",
+      existingClaudeMd: null,
+    });
+    expect(prompt).not.toContain("Mode: IMPROVE");
+    expect(prompt).not.toContain("Mode: KEEP");
+  });
+
+  it("includes multi-language context in prompt", () => {
+    const multiLangProject = {
+      ...projectInfo,
+      techStack: {
+        ...projectInfo.techStack,
+        languages: ["typescript" as const, "python" as const, "go" as const],
+      },
+    };
+    const prompt = getAnalysisPrompt(multiLangProject);
+    expect(prompt).toContain("python");
+    expect(prompt).toContain("go");
+    expect(prompt).toContain("Other Languages");
+  });
 });
 
 // ============================================================================
@@ -1264,6 +1523,19 @@ describe("extractCommands", () => {
     const commands = extractCommands(claudeMd);
     expect(commands).toContain("bun test");
     expect(commands).toHaveLength(1);
+  });
+
+  it("strips inline comments from commands", () => {
+    const claudeMd = "## Common Commands\n\n```bash\nbun test src/cli.test.ts  # Unit tests\n```\n";
+    const commands = extractCommands(claudeMd);
+    expect(commands).toContain("bun test src/cli.test.ts");
+    expect(commands).not.toContain("# Unit tests");
+  });
+
+  it("handles empty code block", () => {
+    const claudeMd = "## Common Commands\n\n```bash\n```\n";
+    const commands = extractCommands(claudeMd);
+    expect(commands).toEqual([]);
   });
 });
 
@@ -1456,6 +1728,50 @@ describe("validateArtifacts", () => {
     expect(result.duplicationsRemoved).toBe(0);
   });
 
+  it("processes files in nested subdirectories", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(path.join(claudeDir, "skills"), { recursive: true });
+    fs.mkdirSync(path.join(claudeDir, "agents"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "## Code Conventions\n\n- camelCase for functions\n- PascalCase for types\n\n## Testing\n"
+    );
+
+    fs.writeFileSync(
+      path.join(claudeDir, "skills", "dev.md"),
+      "---\nname: dev\n---\n\n# Dev\n\n- Ensure camelCase and PascalCase naming\n"
+    );
+
+    fs.writeFileSync(
+      path.join(claudeDir, "agents", "reviewer.md"),
+      "---\nname: reviewer\n---\n\n# Review\n\n- Check camelCase and PascalCase conventions\n"
+    );
+
+    const result = validateArtifacts(tempDir);
+    expect(result.duplicationsRemoved).toBe(2);
+    expect(result.filesModified).toBe(2);
+  });
+
+  it("handles files with no list items to remove", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(path.join(claudeDir, "skills"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "## Code Conventions\n\n- camelCase for functions\n\n## Testing\n"
+    );
+
+    fs.writeFileSync(
+      path.join(claudeDir, "skills", "dev.md"),
+      "---\nname: dev\n---\n\n# Dev\n\nThis skill helps with development.\n"
+    );
+
+    const result = validateArtifacts(tempDir);
+    expect(result.duplicationsRemoved).toBe(0);
+    expect(result.filesModified).toBe(0);
+  });
+
   it("only removes list items, not headings or prose", () => {
     const claudeDir = path.join(tempDir, ".claude");
     fs.mkdirSync(path.join(claudeDir, "agents"), { recursive: true });
@@ -1556,6 +1872,49 @@ describe("installHook", () => {
     expect(fs.existsSync(hooksDir)).toBe(true);
   });
 
+  it("preserves existing non-hook settings when patching", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, ".claude", "settings.json"),
+      JSON.stringify({
+        permissions: { allow: ["Read(**)"] },
+        model: "sonnet",
+      })
+    );
+
+    installHook(tempDir);
+
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(tempDir, ".claude", "settings.json"), "utf-8")
+    );
+    expect(settings.permissions.allow).toContain("Read(**)");
+    expect(settings.model).toBe("sonnet");
+    expect(settings.hooks.PreToolUse).toBeDefined();
+  });
+
+  it("does not duplicate PreToolUse entry on repeated installation", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    installHook(tempDir);
+    installHook(tempDir);
+
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(tempDir, ".claude", "settings.json"), "utf-8")
+    );
+    expect(settings.hooks.PreToolUse).toHaveLength(1);
+  });
+
+  it("overwrites hook script on repeated installation", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude", "hooks"), { recursive: true });
+    const hookPath = path.join(tempDir, ".claude", "hooks", "block-dangerous-commands.js");
+    fs.writeFileSync(hookPath, "// old content");
+
+    installHook(tempDir);
+
+    const content = fs.readFileSync(hookPath, "utf-8");
+    expect(content).not.toContain("// old content");
+    expect(content).toContain("PATTERNS");
+  });
+
   it("generated script contains safety patterns for critical and high levels", () => {
     fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
     installHook(tempDir);
@@ -1566,5 +1925,364 @@ describe("installHook", () => {
     expect(content).toContain("git-force-main");
     expect(content).toContain("npm-publish");
     expect(content).toContain("curl-pipe-sh");
+  });
+});
+
+// ============================================================================
+// Statusline Tests
+// ============================================================================
+
+describe("installStatusline", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("creates statusline script file", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    installStatusline(tempDir);
+
+    const scriptPath = path.join(tempDir, ".claude", "config", "statusline-command.sh");
+    expect(fs.existsSync(scriptPath)).toBe(true);
+
+    const content = fs.readFileSync(scriptPath, "utf-8");
+    expect(content).toContain("#!/usr/bin/env bash");
+    expect(content).toContain("jq");
+    expect(content).toContain("SESSION_ID");
+    expect(content).toContain("REMAINING");
+  });
+
+  it("makes statusline script executable", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    installStatusline(tempDir);
+
+    const scriptPath = path.join(tempDir, ".claude", "config", "statusline-command.sh");
+    const stats = fs.statSync(scriptPath);
+    expect(stats.mode & 0o100).toBeTruthy();
+  });
+
+  it("patches settings.json with statusLine configuration", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, ".claude", "settings.json"),
+      JSON.stringify({ permissions: { allow: [] } })
+    );
+
+    installStatusline(tempDir);
+
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(tempDir, ".claude", "settings.json"), "utf-8")
+    );
+    expect(settings.statusLine).toBeDefined();
+    expect(settings.statusLine.type).toBe("command");
+    expect(settings.statusLine.command).toContain("statusline-command.sh");
+    expect(settings.permissions).toBeDefined();
+  });
+
+  it("creates settings.json if it does not exist", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    installStatusline(tempDir);
+
+    const settingsPath = path.join(tempDir, ".claude", "settings.json");
+    expect(fs.existsSync(settingsPath)).toBe(true);
+
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    expect(settings.statusLine).toBeDefined();
+  });
+
+  it("creates config directory when it does not exist", () => {
+    installStatusline(tempDir);
+
+    const configDir = path.join(tempDir, ".claude", "config");
+    expect(fs.existsSync(configDir)).toBe(true);
+  });
+
+  it("generated script parses git branch and context percentage", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    installStatusline(tempDir);
+
+    const scriptPath = path.join(tempDir, ".claude", "config", "statusline-command.sh");
+    const content = fs.readFileSync(scriptPath, "utf-8");
+    expect(content).toContain("git branch --show-current");
+    expect(content).toContain("remaining_percentage");
+    expect(content).toContain("display_name");
+  });
+});
+
+// ============================================================================
+// Statusline Status Detection Tests
+// ============================================================================
+
+describe("checkStatuslineStatus", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("returns all false when no statusline is configured", () => {
+    const status = checkStatuslineStatus(tempDir);
+    expect(status.projectInstalled).toBe(false);
+    expect(status.projectMatchesOurs).toBe(false);
+  });
+
+  it("detects project-level statusline that matches ours", () => {
+    installStatusline(tempDir);
+    const status = checkStatuslineStatus(tempDir);
+    expect(status.projectInstalled).toBe(true);
+    expect(status.projectMatchesOurs).toBe(true);
+  });
+
+  it("detects project-level statusline with different content", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    const configDir = path.join(claudeDir, "config");
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(path.join(configDir, "statusline-command.sh"), "#!/bin/bash\necho custom");
+    fs.writeFileSync(
+      path.join(claudeDir, "settings.json"),
+      JSON.stringify({
+        statusLine: { type: "command", command: "bash .claude/config/statusline-command.sh" },
+      })
+    );
+
+    const status = checkStatuslineStatus(tempDir);
+    expect(status.projectInstalled).toBe(true);
+    expect(status.projectMatchesOurs).toBe(false);
+  });
+
+  it("detects settings with statusLine but missing script file", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, "settings.json"),
+      JSON.stringify({ statusLine: { type: "command", command: "bash something.sh" } })
+    );
+
+    const status = checkStatuslineStatus(tempDir);
+    expect(status.projectInstalled).toBe(true);
+    expect(status.projectMatchesOurs).toBe(false);
+  });
+});
+
+// ============================================================================
+// Hook Status Detection Tests
+// ============================================================================
+
+describe("checkHookStatus", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("returns all false when no hook is installed", () => {
+    const status = checkHookStatus(tempDir);
+    expect(status.projectInstalled).toBe(false);
+    expect(status.projectMatchesOurs).toBe(false);
+  });
+
+  it("detects project-level hook that matches ours", () => {
+    installHook(tempDir);
+    const status = checkHookStatus(tempDir);
+    expect(status.projectInstalled).toBe(true);
+    expect(status.projectMatchesOurs).toBe(true);
+  });
+
+  it("detects project-level hook with different content", () => {
+    const hooksDir = path.join(tempDir, ".claude", "hooks");
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, "block-dangerous-commands.js"), "// custom hook");
+
+    const status = checkHookStatus(tempDir);
+    expect(status.projectInstalled).toBe(true);
+    expect(status.projectMatchesOurs).toBe(false);
+  });
+});
+
+// ============================================================================
+// Extras Module Tests
+// ============================================================================
+
+describe("EXTRAS registry", () => {
+  it("contains safety-hook and statusline", () => {
+    const ids = EXTRAS.map((e) => e.id);
+    expect(ids).toContain("safety-hook");
+    expect(ids).toContain("statusline");
+  });
+
+  it("each extra has all required fields", () => {
+    for (const extra of EXTRAS) {
+      expect(extra.id).toBeTruthy();
+      expect(extra.name).toBeTruthy();
+      expect(extra.description).toBeTruthy();
+      expect(typeof extra.checkStatus).toBe("function");
+      expect(typeof extra.installProject).toBe("function");
+      expect(typeof extra.installGlobal).toBe("function");
+      expect(extra.projectPath).toBeTruthy();
+      expect(extra.globalPath).toBeTruthy();
+    }
+  });
+
+  it("safety-hook extra detects and installs correctly", () => {
+    const tempDir = createTempDir();
+    try {
+      const hook = EXTRAS.find((e) => e.id === "safety-hook")!;
+      const before = hook.checkStatus(tempDir);
+      expect(before.projectInstalled).toBe(false);
+
+      hook.installProject(tempDir);
+      const after = hook.checkStatus(tempDir);
+      expect(after.projectInstalled).toBe(true);
+      expect(after.projectMatchesOurs).toBe(true);
+    } finally {
+      removeTempDir(tempDir);
+    }
+  });
+
+  it("statusline extra detects and installs correctly", () => {
+    const tempDir = createTempDir();
+    try {
+      const sl = EXTRAS.find((e) => e.id === "statusline")!;
+      const before = sl.checkStatus(tempDir);
+      expect(before.projectInstalled).toBe(false);
+
+      sl.installProject(tempDir);
+      const after = sl.checkStatus(tempDir);
+      expect(after.projectInstalled).toBe(true);
+      expect(after.projectMatchesOurs).toBe(true);
+    } finally {
+      removeTempDir(tempDir);
+    }
+  });
+});
+
+// ============================================================================
+// applyAction Tests
+// ============================================================================
+
+describe("applyAction", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("installs project-level when action is 'project'", () => {
+    const hook = EXTRAS.find((e) => e.id === "safety-hook")!;
+    applyAction("project", hook, tempDir);
+
+    const hookPath = path.join(tempDir, ".claude", "hooks", "block-dangerous-commands.js");
+    expect(fs.existsSync(hookPath)).toBe(true);
+  });
+
+  it("does nothing when action is 'skip'", () => {
+    const hook = EXTRAS.find((e) => e.id === "safety-hook")!;
+    applyAction("skip", hook, tempDir);
+
+    const hookPath = path.join(tempDir, ".claude", "hooks", "block-dangerous-commands.js");
+    expect(fs.existsSync(hookPath)).toBe(false);
+  });
+
+  it("does nothing when action is undefined (cancelled)", () => {
+    const hook = EXTRAS.find((e) => e.id === "safety-hook")!;
+    applyAction(undefined, hook, tempDir);
+
+    const hookPath = path.join(tempDir, ".claude", "hooks", "block-dangerous-commands.js");
+    expect(fs.existsSync(hookPath)).toBe(false);
+  });
+
+  it("installs statusline project-level", () => {
+    const sl = EXTRAS.find((e) => e.id === "statusline")!;
+    applyAction("project", sl, tempDir);
+
+    const scriptPath = path.join(tempDir, ".claude", "config", "statusline-command.sh");
+    expect(fs.existsSync(scriptPath)).toBe(true);
+  });
+});
+
+// ============================================================================
+// Extra Status Detection — Skip Logic Tests
+// ============================================================================
+
+describe("extras skip logic", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("safety-hook: matches ours after project install", () => {
+    const hook = EXTRAS.find((e) => e.id === "safety-hook")!;
+    hook.installProject(tempDir);
+
+    const status = hook.checkStatus(tempDir);
+    expect(status.projectMatchesOurs).toBe(true);
+    // promptExtras would skip this extra
+  });
+
+  it("safety-hook: does not match when different script installed", () => {
+    const hooksDir = path.join(tempDir, ".claude", "hooks");
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, "block-dangerous-commands.js"), "// custom");
+
+    const hook = EXTRAS.find((e) => e.id === "safety-hook")!;
+    const status = hook.checkStatus(tempDir);
+    expect(status.projectInstalled).toBe(true);
+    expect(status.projectMatchesOurs).toBe(false);
+    // promptExtras would show "replace?" prompt
+  });
+
+  it("statusline: matches ours after project install", () => {
+    const sl = EXTRAS.find((e) => e.id === "statusline")!;
+    sl.installProject(tempDir);
+
+    const status = sl.checkStatus(tempDir);
+    expect(status.projectMatchesOurs).toBe(true);
+  });
+
+  it("statusline: does not match when different script installed", () => {
+    const configDir = path.join(tempDir, ".claude", "config");
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(path.join(configDir, "statusline-command.sh"), "#!/bin/bash\necho custom");
+    fs.writeFileSync(
+      path.join(tempDir, ".claude", "settings.json"),
+      JSON.stringify({
+        statusLine: { type: "command", command: "bash .claude/config/statusline-command.sh" },
+      })
+    );
+
+    const sl = EXTRAS.find((e) => e.id === "statusline")!;
+    const status = sl.checkStatus(tempDir);
+    expect(status.projectInstalled).toBe(true);
+    expect(status.projectMatchesOurs).toBe(false);
+  });
+
+  it("not installed at project level: both extras return project false", () => {
+    for (const extra of EXTRAS) {
+      const status = extra.checkStatus(tempDir);
+      expect(status.projectInstalled).toBe(false);
+      expect(status.projectMatchesOurs).toBe(false);
+    }
   });
 });

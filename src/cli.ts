@@ -31,8 +31,9 @@ import ora from "ora";
 import pc from "picocolors";
 import prompts from "prompts";
 import { analyzeRepository } from "./analyzer.js";
+import { promptExtras } from "./extras.js";
 import { ensureDirectories, writeSettings } from "./generator.js";
-import { installHook } from "./hooks.js";
+import type { ClaudeMdPromptOptions } from "./prompt.js";
 import { getAnalysisPrompt } from "./prompt.js";
 import type {
   Args,
@@ -73,7 +74,7 @@ export function getVersion(): string {
 }
 
 // ============================================================================
-// Internal Functions
+// Display & Utility Functions
 // ============================================================================
 
 export function showHelp(): void {
@@ -428,7 +429,6 @@ function getLinterFormatterChoices(lang: string) {
     return [
       { title: "Biome", value: "biome" },
       { title: "ESLint + Prettier", value: "eslint" },
-      { title: "ESLint", value: "eslint" },
       { title: "None", value: null },
     ];
   }
@@ -575,9 +575,13 @@ export function checkClaudeCli(): boolean {
  * Run Claude-powered deep project analysis.
  * Spawns the claude CLI with the analysis prompt to generate all .claude/ content files.
  */
-export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo): Promise<boolean> {
+export function runClaudeAnalysis(
+  projectDir: string,
+  projectInfo: ProjectInfo,
+  options: ClaudeMdPromptOptions = { claudeMdMode: "replace", existingClaudeMd: null }
+): Promise<boolean> {
   return new Promise((resolve) => {
-    const prompt = getAnalysisPrompt(projectInfo);
+    const prompt = getAnalysisPrompt(projectInfo, options);
 
     console.log(pc.cyan("Launching Claude for deep project analysis..."));
     console.log(
@@ -598,6 +602,8 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
       "claude",
       [
         "-p",
+        "--verbose",
+        "--output-format=stream-json",
         "--allowedTools",
         "Read",
         "--allowedTools",
@@ -615,8 +621,51 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
       }
     );
 
+    // Parse streaming JSON to update spinner with tool activity
+    let stdoutBuffer = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdoutBuffer += chunk.toString();
+      const lines = stdoutBuffer.split("\n");
+      stdoutBuffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+
+          // Tool events are in message.content[] with type "tool_use"
+          if (event.type === "assistant" && Array.isArray(event.message?.content)) {
+            for (const block of event.message.content) {
+              if (block.type === "tool_use" && block.name && block.input) {
+                const toolName = block.name;
+                const toolInput = block.input;
+                const filePath = toolInput.file_path || toolInput.path || toolInput.pattern || "";
+                const shortPath = filePath.split("/").slice(-2).join("/");
+                const action = toolName === "Write" || toolName === "Edit" ? "Writing" : "Reading";
+                if (shortPath) {
+                  spinner.text = `${action} ${shortPath}...`;
+                } else {
+                  spinner.text = `Using ${toolName}...`;
+                }
+              }
+            }
+          }
+        } catch {
+          // Not valid JSON or not a tool event — ignore
+        }
+      }
+    });
+
+    child.stdin.on("error", () => {
+      // Ignore EPIPE — handled by child.on("close")
+    });
     child.stdin.write(prompt);
     child.stdin.end();
+
+    let stderrOutput = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrOutput += chunk.toString();
+    });
 
     child.on("error", (err) => {
       spinner.fail(`Failed to launch Claude CLI: ${err.message}`);
@@ -629,6 +678,9 @@ export function runClaudeAnalysis(projectDir: string, projectInfo: ProjectInfo):
         resolve(true);
       } else {
         spinner.fail(`Claude exited with code ${code}`);
+        if (stderrOutput.trim()) {
+          console.error(pc.gray(stderrOutput.trim()));
+        }
         resolve(false);
       }
     });
@@ -721,23 +773,38 @@ async function main(): Promise<void> {
     console.log();
   }
 
-  // Step 3: Check for existing Claude configuration
-  if (projectInfo.techStack.hasClaudeConfig && !args.force) {
-    console.log(pc.yellow("Existing .claude/ configuration detected"));
-    console.log();
+  // Step 3: Check for existing CLAUDE.md and decide mode
+  let claudeMdMode: "keep" | "improve" | "replace" = "replace";
+  let existingClaudeMd: string | null = null;
 
-    if (args.interactive) {
-      const { proceed } = await prompts({
-        type: "confirm",
-        name: "proceed",
-        message: "Update existing configuration?",
-        initial: true,
+  const claudeMdPath = path.join(projectDir, ".claude", "CLAUDE.md");
+  if (fs.existsSync(claudeMdPath)) {
+    existingClaudeMd = fs.readFileSync(claudeMdPath, "utf-8");
+
+    if (args.force) {
+      claudeMdMode = "replace";
+    } else if (args.interactive) {
+      console.log(pc.yellow("Existing CLAUDE.md detected"));
+      console.log();
+
+      const { mode } = await prompts({
+        type: "select",
+        name: "mode",
+        message: "How should we handle the existing CLAUDE.md?",
+        choices: [
+          { title: "Improve — scan and enhance the existing file", value: "improve" },
+          { title: "Replace — generate a new one from scratch", value: "replace" },
+          { title: "Keep — leave CLAUDE.md as-is, regenerate other files", value: "keep" },
+        ],
+        initial: 0,
       });
 
-      if (!proceed) {
-        console.log(pc.gray("Cancelled. Use --force to overwrite."));
+      if (mode === undefined) {
+        console.log(pc.gray("Cancelled."));
         process.exit(0);
       }
+
+      claudeMdMode = mode;
     }
     console.log();
   }
@@ -761,7 +828,10 @@ async function main(): Promise<void> {
   console.log();
 
   // Step 6: Run Claude-powered deep analysis for all .claude/ content files
-  const success = await runClaudeAnalysis(projectDir, projectInfo);
+  const success = await runClaudeAnalysis(projectDir, projectInfo, {
+    claudeMdMode,
+    existingClaudeMd: claudeMdMode === "improve" ? existingClaudeMd : null,
+  });
 
   if (!success) {
     console.error(pc.red("Claude analysis failed. Please try again."));
@@ -811,21 +881,10 @@ async function main(): Promise<void> {
   }
 
   console.log();
-  // Step 9: Offer safety hook installation
+  // Step 9: Offer optional extras (safety hook, statusline, etc.)
   if (args.interactive) {
     console.log();
-    const { installSafetyHook } = await prompts({
-      type: "confirm",
-      name: "installSafetyHook",
-      message: "Add a safety hook to block dangerous commands? (git push, rm -rf, etc.)",
-      initial: true,
-    });
-
-    if (installSafetyHook) {
-      installHook(projectDir);
-      console.log(pc.green("  + .claude/hooks/block-dangerous-commands.js"));
-      console.log(pc.gray("    Blocks destructive Bash commands before execution"));
-    }
+    await promptExtras(projectDir);
   }
 
   console.log();

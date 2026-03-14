@@ -241,15 +241,19 @@ export function validateArtifacts(rootDir: string): ValidationResult {
 
     for (const filePath of files) {
       result.filesChecked++;
-      const changes = processFile(filePath, commands, fingerprints);
+      try {
+        const changes = processFile(filePath, commands, fingerprints);
 
-      if (changes.length > 0) {
-        result.filesModified++;
-        result.duplicationsRemoved += changes.length;
-        for (const change of changes) {
-          change.file = path.relative(rootDir, filePath);
+        if (changes.length > 0) {
+          result.filesModified++;
+          result.duplicationsRemoved += changes.length;
+          for (const change of changes) {
+            change.file = path.relative(rootDir, filePath);
+          }
+          result.changes.push(...changes);
         }
-        result.changes.push(...changes);
+      } catch {
+        // Skip unreadable/unwritable files, continue with remaining
       }
     }
   } catch {

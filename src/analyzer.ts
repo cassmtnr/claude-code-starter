@@ -47,7 +47,7 @@ import type {
  */
 export function analyzeRepository(rootDir: string): ProjectInfo {
   const techStack = detectTechStack(rootDir);
-  const fileCount = countSourceFiles(rootDir, techStack.languages);
+  const fileCount = countSourceFiles(rootDir);
   const packageJson = readPackageJson(rootDir);
 
   return {
@@ -83,7 +83,7 @@ export function detectTechStack(rootDir: string): TechStack {
   const bundler = detectBundler(packageJson, files);
 
   // Detect project characteristics
-  const isMonorepo = detectMonorepo(rootDir, files, packageJson);
+  const isMonorepo = detectMonorepo(files, packageJson);
   const hasDocker =
     files.includes("Dockerfile") ||
     files.includes("docker-compose.yml") ||
@@ -115,6 +115,13 @@ export function detectTechStack(rootDir: string): TechStack {
 // ============================================================================
 // Detection Functions
 // ============================================================================
+
+function getAllDeps(packageJson: Record<string, unknown>): Record<string, string> {
+  return {
+    ...((packageJson.dependencies as Record<string, string>) || {}),
+    ...((packageJson.devDependencies as Record<string, string>) || {}),
+  };
+}
 
 function readPackageJson(rootDir: string): Record<string, unknown> | null {
   const packageJsonPath = path.join(rootDir, "package.json");
@@ -446,10 +453,7 @@ function detectTestingFramework(
   files: string[]
 ): TestingFramework | null {
   if (packageJson) {
-    const allDeps = {
-      ...((packageJson.dependencies as Record<string, string>) || {}),
-      ...((packageJson.devDependencies as Record<string, string>) || {}),
-    };
+    const allDeps = getAllDeps(packageJson);
 
     if (allDeps.vitest) return "vitest";
     if (allDeps.jest) return "jest";
@@ -466,7 +470,8 @@ function detectTestingFramework(
   if (files.includes("pytest.ini") || files.includes("conftest.py")) return "pytest";
   if (files.includes("go.mod")) return "go-test";
   if (files.includes("Cargo.toml")) return "rust-test";
-  if (files.includes("Gemfile")) return "rspec"; // Assume RSpec for Ruby
+  if (files.includes(".rspec")) return "rspec";
+  if (files.includes("Gemfile") && files.includes("spec")) return "rspec";
 
   return null;
 }
@@ -483,10 +488,7 @@ function detectLinter(packageJson: Record<string, unknown> | null, files: string
   if (files.includes("biome.json") || files.includes("biome.jsonc")) return "biome";
 
   if (packageJson) {
-    const allDeps = {
-      ...((packageJson.dependencies as Record<string, string>) || {}),
-      ...((packageJson.devDependencies as Record<string, string>) || {}),
-    };
+    const allDeps = getAllDeps(packageJson);
 
     if (allDeps.eslint) return "eslint";
     if (allDeps["@biomejs/biome"]) return "biome";
@@ -514,20 +516,15 @@ function detectFormatter(
   if (files.includes("biome.json") || files.includes("biome.jsonc")) return "biome";
 
   if (packageJson) {
-    const allDeps = {
-      ...((packageJson.dependencies as Record<string, string>) || {}),
-      ...((packageJson.devDependencies as Record<string, string>) || {}),
-    };
+    const allDeps = getAllDeps(packageJson);
 
     if (allDeps.prettier) return "prettier";
     if (allDeps["@biomejs/biome"]) return "biome";
   }
 
-  // Python formatters
-  if (files.includes("pyproject.toml")) {
-    // Could check for black/ruff in pyproject.toml
-    return "black";
-  }
+  // Python formatters — check ruff config files first, then fall back to black
+  if (files.includes("ruff.toml") || files.includes(".ruff.toml")) return "ruff";
+  if (files.includes("pyproject.toml")) return "black";
 
   return null;
 }
@@ -543,10 +540,7 @@ function detectBundler(
   if (files.some((f) => f.startsWith("esbuild"))) return "esbuild";
 
   if (packageJson) {
-    const allDeps = {
-      ...((packageJson.dependencies as Record<string, string>) || {}),
-      ...((packageJson.devDependencies as Record<string, string>) || {}),
-    };
+    const allDeps = getAllDeps(packageJson);
 
     if (allDeps.vite) return "vite";
     if (allDeps.webpack) return "webpack";
@@ -561,11 +555,7 @@ function detectBundler(
   return null;
 }
 
-function detectMonorepo(
-  rootDir: string,
-  files: string[],
-  packageJson: Record<string, unknown> | null
-): boolean {
+function detectMonorepo(files: string[], packageJson: Record<string, unknown> | null): boolean {
   // Check for monorepo config files
   if (files.includes("pnpm-workspace.yaml")) return true;
   if (files.includes("lerna.json")) return true;
@@ -574,12 +564,6 @@ function detectMonorepo(
 
   // Check package.json workspaces
   if (packageJson?.workspaces) return true;
-
-  // Check for packages or apps directory
-  const packagesDir = path.join(rootDir, "packages");
-  const appsDir = path.join(rootDir, "apps");
-  if (fs.existsSync(packagesDir) && fs.statSync(packagesDir).isDirectory()) return true;
-  if (fs.existsSync(appsDir) && fs.statSync(appsDir).isDirectory()) return true;
 
   return false;
 }
@@ -694,7 +678,7 @@ function listSourceFilesShallow(rootDir: string, extensions: string[]): string[]
   return files;
 }
 
-function countSourceFiles(rootDir: string, _languages: Language[]): number {
+function countSourceFiles(rootDir: string): number {
   // Always count all common source file extensions
   // This ensures we detect existing projects regardless of config file detection
   const extensions = [
