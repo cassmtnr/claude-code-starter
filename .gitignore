@@ -10,18 +10,11 @@ bun.lock
 
 # IDE
 .vscode/
-.idea/
+.idea/Before prompting if the user wants to install the statusline, it should check if the user already has one installed in the global claude settings, if yes, ask if they want to replace, is
+  it possible?
 
 # Test coverage
 coverage/
 
 # AI Agent tooling
 .claude/
-.agent/
-.ralph/
-ralph.yml
-PROMPT.md
-.claude/.version
-.claude/settings.local.json
-.claude/state/
-REVIEW.md

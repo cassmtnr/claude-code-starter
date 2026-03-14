@@ -24,6 +24,9 @@
       },
       "style": {
         "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        "noTemplateCurlyInString": "off"
       }
     }
   },
