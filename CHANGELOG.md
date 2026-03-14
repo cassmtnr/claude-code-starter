@@ -1,3 +1,10 @@
+## [0.16.0](https://github.com/cassmtnr/claude-code-starter/compare/0.15.0...0.16.0) (2026-03-14)
+
+### Features
+
+* implement prompts for statusline ([75cc852](https://github.com/cassmtnr/claude-code-starter/commit/75cc852a432e27a162521c230ce481feb77a5dac))
+* implement prompts for statusline ([5c878f8](https://github.com/cassmtnr/claude-code-starter/commit/5c878f8adc98bdd5f7d9b8b36b2a15a90f32edbf))
+
 ## [0.15.0](https://github.com/cassmtnr/claude-code-starter/compare/0.14.1...0.15.0) (2026-03-14)
 
 ### Features
