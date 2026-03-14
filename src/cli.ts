@@ -32,6 +32,7 @@ import pc from "picocolors";
 import prompts from "prompts";
 import { analyzeRepository } from "./analyzer.js";
 import { ensureDirectories, writeSettings } from "./generator.js";
+import { installHook } from "./hooks.js";
 import { getAnalysisPrompt } from "./prompt.js";
 import type {
   Args,
@@ -42,6 +43,7 @@ import type {
   NewProjectPreferences,
   ProjectInfo,
 } from "./types.js";
+import { validateArtifacts } from "./validator.js";
 
 // ============================================================================
 // Constants
@@ -98,7 +100,7 @@ ${pc.bold("WHAT IT DOES")}
      - Skills for your frameworks and workflows
      - Agents for code review and testing
      - Rules matching your code style
-     - Commands for task management
+     - Commands for analysis and code review
 
 ${pc.bold("REQUIREMENTS")}
   Claude CLI must be installed: https://claude.ai/download
@@ -766,7 +768,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Step 7: Show summary
+  // Step 7: Validate and deduplicate artifacts
+  const validation = validateArtifacts(projectDir);
+  if (validation.duplicationsRemoved > 0) {
+    console.log(
+      pc.gray(
+        `  Deduplication: removed ${validation.duplicationsRemoved} redundancies from ${validation.filesModified} files`
+      )
+    );
+  }
+
+  // Step 8: Show summary
   const generatedFiles = getGeneratedFiles(projectDir);
   console.log();
   console.log(pc.green(`Done! (${generatedFiles.length} files)`));
@@ -796,6 +808,24 @@ async function main(): Promise<void> {
   }
   if (commands.length > 0) {
     console.log(`  ${commands.length} commands`);
+  }
+
+  console.log();
+  // Step 9: Offer safety hook installation
+  if (args.interactive) {
+    console.log();
+    const { installSafetyHook } = await prompts({
+      type: "confirm",
+      name: "installSafetyHook",
+      message: "Add a safety hook to block dangerous commands? (git push, rm -rf, etc.)",
+      initial: true,
+    });
+
+    if (installSafetyHook) {
+      installHook(projectDir);
+      console.log(pc.green("  + .claude/hooks/block-dangerous-commands.js"));
+      console.log(pc.gray("    Blocks destructive Bash commands before execution"));
+    }
   }
 
   console.log();
