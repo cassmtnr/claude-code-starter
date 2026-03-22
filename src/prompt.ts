@@ -6,9 +6,10 @@
  * to deeply analyze a project and generate ALL .claude/ configuration files:
  * - CLAUDE.md — Project-specific instructions
  * - Skills — Methodology and framework-specific guides
- * - Agents — Code reviewer, test writer
+ * - Agents — 6 agents (code-reviewer, test-writer, code-simplifier, explore, plan, docs-writer)
  * - Rules — Language-specific conventions
- * - Commands — /analyze, /code-review
+ * - Commands — 6 commands (/analyze, /code-review, /commit, /fix, /explain, /refactor)
+ * - Memory — Initial memory seeds from project analysis
  *
  * The prompt is embedded as a string constant so it's bundled by tsup
  * and doesn't require a separate file at runtime.
@@ -22,6 +23,7 @@ import type { ProjectInfo, TechStack } from "./types.js";
 export interface ClaudeMdPromptOptions {
   claudeMdMode: "keep" | "improve" | "replace";
   existingClaudeMd: string | null;
+  noMemory?: boolean;
 }
 
 /**
@@ -35,6 +37,8 @@ export function getAnalysisPrompt(
   const templateVars = buildTemplateVariables(projectInfo);
   const claudeMdInstructions = buildClaudeMdInstructions(options);
 
+  const memorySection = options.noMemory ? "" : `\n\n${MEMORY_PROMPT}`;
+
   return `${ANALYSIS_PROMPT}
 
 ${SKILLS_PROMPT}
@@ -43,7 +47,7 @@ ${AGENTS_PROMPT}
 
 ${RULES_PROMPT}
 
-${COMMANDS_PROMPT}
+${COMMANDS_PROMPT}${memorySection}
 
 ---
 
@@ -70,11 +74,12 @@ ${options.claudeMdMode === "keep" ? `3. Skip CLAUDE.md generation — the existi
 4. Execute Phase 3 - verify quality before writing
 ${options.claudeMdMode === "keep" ? `5. Skip writing CLAUDE.md — it is being preserved` : `5. Use the Write tool to create \`.claude/CLAUDE.md\` with the final content`}
 6. Execute Phase 4 - generate ALL skill files (4 core + framework-specific if detected)
-7. Execute Phase 5 - generate agent files
+7. Execute Phase 5 - generate ALL agent files (6 agents)
 8. Execute Phase 6 - generate rule files
-9. Execute Phase 7 - generate command files (2 commands: analyze, code-review)
-10. Run the Anti-Redundancy Enforcement checks one final time across ALL generated files — if any convention is restated, any command is duplicated, or any rule lacks a \`paths:\` filter, fix it before proceeding
-11. Output a brief summary of what was generated and any gaps found
+9. Execute Phase 7 - generate ALL command files (6 commands)
+${options.noMemory ? `10. Skip memory seeding (--no-memory flag)` : `10. Execute Phase 8 - seed initial memory files`}
+11. Run the Anti-Redundancy Enforcement checks one final time across ALL generated files — if any convention is restated, any command is duplicated, or any rule lacks a \`paths:\` filter, fix it before proceeding
+12. Output a brief summary of what was generated and any gaps found
 
 Do NOT output file contents to stdout. Write all files to disk using the Write tool.
 Generate ALL files in a single pass — do not stop after CLAUDE.md.`;
@@ -569,7 +574,7 @@ const SKILLS_PROMPT = `---
 ## Phase 4: Generate Skills
 
 Write each skill file to \`.claude/skills/\` using the Write tool. Every skill must have
-YAML frontmatter with \`name\`, \`description\`, and optionally \`globs\` for file matching.
+YAML frontmatter with \`name\`, \`description\`, and \`globs\` for auto-triggering when relevant files are open.
 
 **Tailor ALL skills to this specific project** — use the actual file patterns and
 conventions discovered during Phase 1.
@@ -631,7 +636,29 @@ Generate the matching skill ONLY if the framework was detected in the tech stack
 
 - **Rails detected** → Write \`.claude/skills/rails-patterns.md\` — MVC, ActiveRecord, concerns, service objects, jobs, mailers, strong parameters.
 
-- **Spring detected** → Write \`.claude/skills/spring-patterns.md\` — Beans, controllers, services, repositories, AOP, dependency injection, configuration properties.`;
+- **Spring detected** → Write \`.claude/skills/spring-patterns.md\` — Beans, controllers, services, repositories, AOP, dependency injection, configuration properties.
+
+### 4.3 Project-Specific Skills (ONLY if detected)
+
+Generate additional skills based on detected infrastructure:
+
+- **Database/ORM detected** (Prisma, Drizzle, TypeORM, SQLAlchemy, Mongoose) → Write \`.claude/skills/database-patterns.md\` with globs targeting migration/schema files. Content: migration workflow, schema change process, query optimization patterns for the detected ORM, seed data conventions.
+
+- **Docker detected** → Write \`.claude/skills/docker-patterns.md\` with globs: \`["**/Dockerfile*", "**/docker-compose*", "**/.dockerignore"]\`. Content: multi-stage build patterns, compose service definitions, volume mounting, health checks, image optimization.
+
+- **Monorepo detected** → Write \`.claude/skills/monorepo-patterns.md\` with globs targeting workspace configs. Content: cross-package changes, shared dependency management, workspace protocol, package publishing order.
+
+- **CI/CD detected** → Write \`.claude/skills/cicd-patterns.md\` with globs targeting workflow files. Content: workflow modification guidelines, secret handling, deployment patterns, caching strategies for the detected CI platform.
+
+### 4.4 Skill Globs Reference
+
+Every skill MUST include a \`globs\` field in its frontmatter for auto-triggering:
+
+- \`iterative-development.md\` → omit globs (methodology, invoked manually)
+- \`code-deduplication.md\` → omit globs (methodology, invoked manually)
+- \`security.md\` → \`globs: ["**/.env*", "**/secrets/**", "**/auth/**", "**/middleware/**"]\`
+- \`testing-methodology.md\` → \`globs: ["**/*.test.*", "**/*.spec.*", "**/tests/**", "**/test/**"]\`
+- Framework skills → framework-specific globs (e.g., Next.js: \`["**/app/**", "**/pages/**", "next.config.*"]\`)`;
 
 // ============================================================================
 // Phase 5: Agents Generation Prompt
@@ -641,7 +668,7 @@ const AGENTS_PROMPT = `---
 
 ## Phase 5: Generate Agents
 
-Write 2 agent files to \`.claude/agents/\`.
+Write 6 agent files to \`.claude/agents/\`.
 
 ### \`.claude/agents/code-reviewer.md\`
 
@@ -696,7 +723,121 @@ Body content — instructions for the test writer agent:
 - Include edge cases: empty inputs, nulls, errors, boundaries
 - Mock external dependencies following project patterns
 - Run tests after writing to verify they pass
-- Do NOT duplicate the testing-methodology skill content. The skill covers test design (what to test, edge cases, organization); this agent covers writing and running tests (framework syntax, assertions, execution).`;
+- Do NOT duplicate the testing-methodology skill content. The skill covers test design (what to test, edge cases, organization); this agent covers writing and running tests (framework syntax, assertions, execution).
+
+### \`.claude/agents/code-simplifier.md\`
+
+YAML frontmatter:
+\`\`\`yaml
+---
+name: code-simplifier
+description: Simplifies and refines code for clarity, consistency, and maintainability while preserving all functionality
+tools:
+  - Read
+  - Grep
+  - Glob
+  - Write
+  - Edit
+  - "Bash({lint_command})"
+  - "Bash({test_command})"
+model: sonnet
+---
+\`\`\`
+
+Body content — instructions for the code simplifier agent:
+- Focus on recently modified code (use \`git diff --name-only\` to identify changed files)
+- Look for: duplicated logic, overly complex conditionals, dead code, inconsistent patterns
+- Simplify without changing behavior — preserve ALL existing functionality
+- Follow conventions in CLAUDE.md
+- Specific simplifications: extract repeated code into helpers, flatten nested conditionals, remove unused variables/imports, replace verbose patterns with idiomatic equivalents
+- Run the linter after modifications
+- Run tests after modifications to verify nothing breaks
+- Do NOT add features, refactor beyond the changed area, or make "improvements" beyond simplification
+
+### \`.claude/agents/explore.md\`
+
+YAML frontmatter:
+\`\`\`yaml
+---
+name: explore
+description: Fast codebase exploration — find files, search code, answer architecture questions
+tools:
+  - Read
+  - Grep
+  - Glob
+disallowed_tools:
+  - Write
+  - Edit
+  - Bash
+model: haiku
+---
+\`\`\`
+
+Body content — instructions for the explore agent:
+- Use Glob for file pattern matching, Grep for content search, Read for file contents
+- Answer questions about: where things are defined, how modules connect, what patterns are used
+- Report findings in a structured format: file paths, relevant code snippets, relationships
+- When asked "how does X work?": trace the code path from entry point to implementation
+- When asked "where is X?": search broadly first (Glob for files, Grep for content), then narrow
+- Never modify files — this agent is strictly read-only
+- Be thorough but fast — use targeted searches, not exhaustive reads
+
+### \`.claude/agents/plan.md\`
+
+YAML frontmatter:
+\`\`\`yaml
+---
+name: plan
+description: Designs implementation plans with step-by-step approach and trade-off analysis
+tools:
+  - Read
+  - Grep
+  - Glob
+disallowed_tools:
+  - Write
+  - Edit
+  - Bash
+model: sonnet
+---
+\`\`\`
+
+Body content — instructions for the plan agent:
+- Read relevant source files to understand current architecture
+- Identify affected files, dependencies, and potential risks
+- Produce a step-by-step plan with: files to create/modify, approach for each, testing strategy
+- Consider trade-offs: complexity vs simplicity, performance vs readability
+- Flag breaking changes or migration requirements
+- Follow conventions in CLAUDE.md
+- Output format: numbered steps, each with file path, action (create/modify/delete), and description
+- Include a "Risks & Considerations" section at the end
+
+### \`.claude/agents/docs-writer.md\`
+
+YAML frontmatter:
+\`\`\`yaml
+---
+name: docs-writer
+description: Generates and updates documentation from code analysis
+tools:
+  - Read
+  - Grep
+  - Glob
+  - Write
+  - Edit
+disallowed_tools:
+  - Bash
+model: sonnet
+---
+\`\`\`
+
+Body content — instructions for the docs writer agent:
+- Analyze code changes (specified files or recent changes)
+- Update relevant documentation: README, API docs, architecture docs, changelogs
+- Generate JSDoc/docstrings for new public functions, classes, and interfaces
+- Maintain consistency with existing documentation style
+- Never fabricate information — only document what is verifiable from the code
+- When updating existing docs, preserve the author's structure and voice
+- For new documentation, follow the project's existing documentation patterns`;
 
 // ============================================================================
 // Phase 6: Rules Generation Prompt
@@ -771,7 +912,7 @@ const COMMANDS_PROMPT = `---
 
 ## Phase 7: Generate Commands
 
-Write 2 command files to \`.claude/commands/\`. Each needs YAML frontmatter with
+Write 6 command files to \`.claude/commands/\`. Each needs YAML frontmatter with
 \`allowed-tools\`, \`description\`, and optionally \`argument-hint\`.
 
 Do NOT generate task management commands (\`task.md\`, \`status.md\`, \`done.md\`) —
@@ -799,4 +940,136 @@ Body: This command delegates to the code-reviewer agent for thorough review.
 1. Run \`git diff\` and \`git diff --cached\` to identify staged and unstaged changes
 2. Spawn the \`code-reviewer\` agent to perform the full review
 3. If the agent is unavailable, perform a lightweight review: run the linter and check for obvious issues
-Do NOT duplicate the code-reviewer agent's checklist here — the agent has the full review criteria.`;
+Do NOT duplicate the code-reviewer agent's checklist here — the agent has the full review criteria.
+
+### \`.claude/commands/commit.md\`
+\`\`\`yaml
+---
+allowed-tools: ["Read", "Grep", "Glob", "Bash(git status)", "Bash(git diff)", "Bash(git diff --cached)", "Bash(git log --oneline -10)"]
+description: "Generate a conventional commit message from staged changes"
+---
+\`\`\`
+Body:
+1. Run \`git diff --cached\` to see staged changes (if nothing staged, run \`git diff\` and suggest what to stage)
+2. Run \`git log --oneline -10\` to match existing commit style
+3. Analyze the nature of changes: feat, fix, refactor, chore, docs, test, style, perf, ci, build
+4. Determine scope from the files changed (e.g., \`cli\`, \`analyzer\`, \`hooks\`)
+5. Generate a conventional commit message: \`type(scope): subject\`
+6. Include a body if changes are substantial (>50 lines changed)
+7. Follow commit conventions in CLAUDE.md
+8. Present the message for user review — do NOT run git commit
+
+### \`.claude/commands/fix.md\`
+\`\`\`yaml
+---
+allowed-tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash({test_command})", "Bash({lint_command})"]
+description: "Diagnose and fix a failing test or error"
+argument-hint: "<error message or test name>"
+---
+\`\`\`
+Body:
+1. If argument is a test name: run that specific test to reproduce the failure
+2. If argument is an error message: search codebase for related code
+3. Follow 4-phase debugging methodology:
+   - **Reproduce**: Run the failing test/command to see the exact error
+   - **Locate**: Trace the error from the failure point to the source
+   - **Diagnose**: Understand WHY the code fails (not just WHERE)
+   - **Fix**: Apply the minimal fix that resolves the root cause
+4. Re-run the failing test to verify the fix
+5. Run the full test suite to check for regressions (see Common Commands in CLAUDE.md)
+
+### \`.claude/commands/explain.md\`
+\`\`\`yaml
+---
+allowed-tools: ["Read", "Grep", "Glob"]
+description: "Deep explanation of a file, module, or concept"
+argument-hint: "<file path, module name, or concept>"
+---
+\`\`\`
+Body:
+1. Read the specified file or search for the module/concept
+2. Trace dependencies (what it imports) and dependents (what imports it)
+3. Explain in a structured format:
+   - **Purpose**: What this code does and why it exists
+   - **How It Works**: Step-by-step walkthrough of the logic
+   - **Dependencies**: What it relies on (internal and external)
+   - **Public API**: Exported functions, classes, types with brief descriptions
+   - **Gotchas**: Non-obvious behavior, edge cases, known limitations
+4. Use actual code references with file paths
+5. Tailor the explanation depth to the complexity of the code
+
+### \`.claude/commands/refactor.md\`
+\`\`\`yaml
+---
+allowed-tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash({test_command})", "Bash({lint_command})"]
+description: "Targeted refactoring of a specific area"
+argument-hint: "<file path or description of what to refactor>"
+---
+\`\`\`
+Body:
+1. Read the target code and understand its current structure
+2. Search for ALL references to affected functions/variables/types (Grep the entire project)
+3. Plan the refactoring: what changes, what stays, what tests cover it
+4. Apply changes incrementally:
+   - Make the structural change
+   - Update all references (imports, usages, tests, docs)
+   - Run linter
+   - Run tests
+5. Verify no stale references remain (Grep for old names)
+6. Follow conventions in CLAUDE.md`;
+
+// ============================================================================
+// Phase 8: Memory Bootstrapping Prompt
+// ============================================================================
+
+const MEMORY_PROMPT = `---
+
+## Phase 8: Seed Initial Memory
+
+Claude Code has a persistent memory system at \`.claude/memory/\`. Seed it with
+factual information discovered during Phase 1 that would be useful in future conversations.
+
+**Only write memories that cannot be easily derived from reading the code or CLAUDE.md.**
+
+### Memory File Format
+
+Each memory file uses this frontmatter format:
+\`\`\`markdown
+---
+name: {memory name}
+description: {one-line description}
+type: {project | reference}
+---
+
+{memory content}
+\`\`\`
+
+### What to Seed
+
+1. **Project memory** (type: \`project\`) — Write 1-2 files for:
+   - Architecture pattern and rationale (e.g., "Clean Architecture with feature-based modules — chosen for testability and team scaling")
+   - Primary domain and business context (e.g., "E-commerce platform for B2B wholesale — domain entities are Company, Order, Product, PriceList")
+
+2. **Reference memory** (type: \`reference\`) — Write 1-2 files for:
+   - CI/CD platform and deployment patterns (e.g., "GitHub Actions deploys to Vercel on push to main, preview deploys on PRs")
+   - External system pointers found in README or config (e.g., "API docs at /docs/api.md, issue tracker is GitHub Issues")
+
+### What NOT to Seed
+
+- Anything already in CLAUDE.md (commands, conventions, file structure)
+- Anything derivable from config files (package.json, tsconfig, etc.)
+- Generic information (e.g., "this is a TypeScript project")
+- Ephemeral state (current bugs, in-progress work)
+
+### Where to Write
+
+Write memory files to \`.claude/memory/\`:
+- \`.claude/memory/architecture.md\`
+- \`.claude/memory/domain.md\`
+- \`.claude/memory/deployment.md\`
+- \`.claude/memory/references.md\`
+
+Only write files for which you have genuine, project-specific information.
+Write a \`.claude/memory/MEMORY.md\` index file with one-line pointers to each memory file.
+
+Skip this phase entirely if the project is too new or simple to have meaningful memory seeds.`;

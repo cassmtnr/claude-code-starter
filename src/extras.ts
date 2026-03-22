@@ -16,26 +16,20 @@ import pc from "picocolors";
 import prompts from "prompts";
 import {
   checkHookStatus,
+  checkSensitiveHookStatus,
   checkStatuslineStatus,
   installHook,
   installHookGlobal,
+  installSensitiveHook,
+  installSensitiveHookGlobal,
   installStatusline,
   installStatuslineGlobal,
 } from "./hooks.js";
+import type { InstallStatus } from "./types.js";
 
 // ============================================================================
 // Extra Interface
 // ============================================================================
-
-/**
- * Installation status for an extra at both project and global scope
- */
-export interface ExtraStatus {
-  projectInstalled: boolean;
-  globalInstalled: boolean;
-  projectMatchesOurs: boolean;
-  globalMatchesOurs: boolean;
-}
 
 /**
  * Definition of an optional extra that can be installed
@@ -44,7 +38,7 @@ export interface Extra {
   id: string;
   name: string;
   description: string;
-  checkStatus: (projectDir: string) => ExtraStatus;
+  checkStatus: (projectDir: string) => InstallStatus;
   installProject: (projectDir: string) => void;
   installGlobal: () => void;
   projectPath: string;
@@ -75,6 +69,16 @@ export const EXTRAS: Extra[] = [
     installGlobal: installStatuslineGlobal,
     projectPath: ".claude/config/statusline-command.sh",
     globalPath: "~/.claude/config/statusline-command.sh",
+  },
+  {
+    id: "sensitive-files",
+    name: "Sensitive file protection",
+    description: "Warns before editing migrations, env, lock files, credentials",
+    checkStatus: checkSensitiveHookStatus,
+    installProject: installSensitiveHook,
+    installGlobal: installSensitiveHookGlobal,
+    projectPath: ".claude/hooks/protect-sensitive-files.js",
+    globalPath: "~/.claude/hooks/protect-sensitive-files.js",
   },
 ];
 

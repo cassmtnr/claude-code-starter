@@ -25,6 +25,65 @@ export interface Args {
   interactive: boolean;
   verbose: boolean;
   refresh: boolean;
+  tune: boolean;
+  check: boolean;
+  noMemory: boolean;
+  exportPath: string | null;
+  importPath: string | null;
+  template: string | null;
+  profile: Profile | null;
+}
+
+/**
+ * Deployment/usage profiles that adjust generation parameters
+ */
+export type Profile = "solo" | "team" | "ci";
+
+/**
+ * Installation status for an extra/hook at both project and global scope
+ */
+export interface InstallStatus {
+  projectInstalled: boolean;
+  globalInstalled: boolean;
+  projectMatchesOurs: boolean;
+  globalMatchesOurs: boolean;
+}
+
+/**
+ * Health check result for a single check
+ */
+export interface HealthCheckItem {
+  name: string;
+  passed: boolean;
+  score: number;
+  maxScore: number;
+  message: string;
+}
+
+/**
+ * Aggregate health check result
+ */
+export interface HealthResult {
+  score: number;
+  maxScore: number;
+  items: HealthCheckItem[];
+}
+
+/**
+ * Export/import configuration format
+ */
+export interface ExportConfig {
+  version: string;
+  exportDate: string;
+  projectName: string;
+  techStack: Partial<TechStack>;
+  claudeMd: string | null;
+  settings: Record<string, unknown> | null;
+  skills: Record<string, string>;
+  agents: Record<string, string>;
+  rules: Record<string, string>;
+  commands: Record<string, string>;
+  hooks: Record<string, string>;
 }
 
 /**

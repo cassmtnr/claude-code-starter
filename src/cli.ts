@@ -25,6 +25,7 @@
 
 import { execSync, spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ora from "ora";
@@ -33,6 +34,8 @@ import prompts from "prompts";
 import { analyzeRepository } from "./analyzer.js";
 import { promptExtras } from "./extras.js";
 import { ensureDirectories, writeSettings } from "./generator.js";
+import { checkHealth } from "./health.js";
+import { exportConfig, findProjectTemplate, importConfig, loadTemplate } from "./portability.js";
 import type { ClaudeMdPromptOptions } from "./prompt.js";
 import { getAnalysisPrompt } from "./prompt.js";
 import type {
@@ -42,6 +45,7 @@ import type {
   Language,
   Linter,
   NewProjectPreferences,
+  Profile,
   ProjectInfo,
 } from "./types.js";
 import { validateArtifacts } from "./validator.js";
@@ -50,23 +54,58 @@ import { validateArtifacts } from "./validator.js";
 // Constants
 // ============================================================================
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf-8")
-).version;
+declare const __VERSION__: string | undefined;
+
+let VERSION: string;
+if (typeof __VERSION__ !== "undefined") {
+  VERSION = __VERSION__;
+} else {
+  // Fallback for development (not built via tsup)
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    VERSION = JSON.parse(
+      fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf-8")
+    ).version;
+  } catch {
+    VERSION = "unknown";
+  }
+}
 
 // ============================================================================
 // Exported Functions (testable)
 // ============================================================================
 
 export function parseArgs(args: string[]): Args {
+  const findValue = (flag: string): string | null => {
+    const idx = args.indexOf(flag);
+    if (idx !== -1 && idx + 1 < args.length) return args[idx + 1];
+    return null;
+  };
+
+  const profileValue = findValue("--profile");
+  const validProfiles = ["solo", "team", "ci"];
+
+  const profile =
+    profileValue && validProfiles.includes(profileValue) ? (profileValue as Profile) : null;
+
+  // Profile overrides: ci forces non-interactive and skips memory seeding
+  let interactive = !args.includes("--no-interactive") && !args.includes("-y");
+  if (profile === "ci") interactive = false;
+
   return {
     help: args.includes("-h") || args.includes("--help"),
     version: args.includes("-v") || args.includes("--version"),
     force: args.includes("-f") || args.includes("--force"),
-    interactive: !args.includes("--no-interactive") && !args.includes("-y"),
+    interactive,
     verbose: args.includes("--verbose") || args.includes("-V"),
     refresh: args.includes("--refresh"),
+    tune: args.includes("--tune"),
+    check: args.includes("--check"),
+    noMemory: args.includes("--no-memory") || profile === "ci",
+    exportPath: findValue("--export"),
+    importPath: findValue("--import"),
+    template: findValue("--template"),
+    profile,
   };
 }
 
@@ -123,12 +162,19 @@ ${pc.bold("USAGE")}
   npx claude-code-starter [OPTIONS]
 
 ${pc.bold("OPTIONS")}
-  -h, --help          Show this help message
-  -v, --version       Show version number
-  -f, --force         Force overwrite existing .claude files
-  -y, --no-interactive  Skip interactive prompts (use defaults)
-  -V, --verbose       Show detailed output
-  --refresh           Refresh settings.json, hooks, and statusline without re-running Claude analysis
+  -h, --help             Show this help message
+  -v, --version          Show version number
+  -f, --force            Force overwrite existing .claude files
+  -y, --no-interactive   Skip interactive prompts (use defaults)
+  -V, --verbose          Show detailed output
+  --refresh              Refresh settings.json, hooks, and statusline without re-running Claude analysis
+  --tune                 Re-analyze existing .claude/ setup and show health report
+  --check                Audit .claude/ directory and exit with score (CI-friendly)
+  --no-memory            Skip memory seeding during analysis
+  --export <path>        Export .claude/ config as portable JSON archive
+  --import <path>        Import a config archive into .claude/
+  --template <path>      Bootstrap from a template file
+  --profile <name>       Generation profile: solo, team, or ci
 
 ${pc.bold("WHAT IT DOES")}
   1. Analyzes your repository's tech stack
@@ -658,6 +704,13 @@ export function runClaudeAnalysis(
       }
     );
 
+    // Signal handling — kill child process on Ctrl+C
+    const cleanup = () => {
+      child.kill("SIGTERM");
+    };
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
+
     // Parse streaming JSON to update spinner with tool activity
     let stdoutBuffer = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -710,6 +763,9 @@ export function runClaudeAnalysis(
     });
 
     child.on("close", (code) => {
+      process.off("SIGINT", cleanup);
+      process.off("SIGTERM", cleanup);
+
       if (code === 0) {
         spinner.succeed("Claude analysis complete!");
         resolve(true);
@@ -769,6 +825,145 @@ async function main(): Promise<void> {
   checkForUpdate();
 
   const projectDir = process.cwd();
+
+  // --- Subcommand: --check (health audit, exit with score) ---
+  if (args.check) {
+    const claudeDir = path.join(projectDir, ".claude");
+    if (!fs.existsSync(claudeDir)) {
+      console.error(pc.red("No .claude/ directory found. Run claude-code-starter first."));
+      process.exit(1);
+    }
+
+    const result = checkHealth(projectDir);
+    console.log(pc.bold("Health Check"));
+    console.log();
+
+    for (const item of result.items) {
+      const icon = item.passed ? pc.green("PASS") : pc.red("FAIL");
+      console.log(`  ${icon} ${item.name} (${item.score}/${item.maxScore})`);
+      console.log(pc.gray(`       ${item.message}`));
+    }
+
+    console.log();
+    const pct = Math.round((result.score / result.maxScore) * 100);
+    const scoreColor = pct >= 70 ? pc.green : pct >= 40 ? pc.yellow : pc.red;
+    console.log(scoreColor(`Score: ${result.score}/${result.maxScore} (${pct}%)`));
+
+    process.exit(pct >= 60 ? 0 : 1);
+  }
+
+  // --- Subcommand: --tune (health report + suggestions) ---
+  if (args.tune) {
+    const claudeDir = path.join(projectDir, ".claude");
+    if (!fs.existsSync(claudeDir)) {
+      console.error(pc.red("No .claude/ directory found. Run claude-code-starter first."));
+      process.exit(1);
+    }
+
+    console.log(pc.gray("Analyzing existing .claude/ configuration..."));
+    console.log();
+
+    const projectInfo = analyzeRepository(projectDir);
+    showTechStack(projectInfo, args.verbose);
+
+    const result = checkHealth(projectDir);
+    console.log(pc.bold("Configuration Health"));
+    console.log();
+
+    for (const item of result.items) {
+      const icon = item.passed ? pc.green("PASS") : pc.yellow("WARN");
+      console.log(`  ${icon} ${item.name} (${item.score}/${item.maxScore})`);
+      console.log(pc.gray(`       ${item.message}`));
+    }
+
+    console.log();
+    const pct = Math.round((result.score / result.maxScore) * 100);
+    const scoreColor = pct >= 70 ? pc.green : pct >= 40 ? pc.yellow : pc.red;
+    console.log(scoreColor(`Score: ${result.score}/${result.maxScore} (${pct}%)`));
+
+    const failing = result.items.filter((i) => !i.passed);
+    if (failing.length > 0) {
+      console.log();
+      console.log(pc.bold("Suggestions:"));
+      for (const item of failing) {
+        console.log(`  - ${item.message}`);
+      }
+      console.log();
+      console.log(
+        pc.gray("Run claude-code-starter again to regenerate, or --refresh for settings only")
+      );
+    }
+
+    return;
+  }
+
+  // --- Subcommand: --export ---
+  if (args.exportPath) {
+    const claudeDir = path.join(projectDir, ".claude");
+    if (!fs.existsSync(claudeDir)) {
+      console.error(pc.red("No .claude/ directory found. Nothing to export."));
+      process.exit(1);
+    }
+
+    const config = exportConfig(projectDir, args.exportPath);
+    const fileCount =
+      Object.keys(config.skills).length +
+      Object.keys(config.agents).length +
+      Object.keys(config.rules).length +
+      Object.keys(config.commands).length +
+      Object.keys(config.hooks).length +
+      (config.claudeMd ? 1 : 0) +
+      (config.settings ? 1 : 0);
+    console.log(pc.green(`Exported ${fileCount} files to ${args.exportPath}`));
+    return;
+  }
+
+  // --- Subcommand: --import ---
+  if (args.importPath) {
+    if (!fs.existsSync(args.importPath)) {
+      console.error(pc.red(`File not found: ${args.importPath}`));
+      process.exit(1);
+    }
+
+    const written = importConfig(args.importPath, projectDir, args.force);
+    if (written.length === 0) {
+      console.log(pc.yellow("No files written (all already exist). Use -f to overwrite."));
+    } else {
+      console.log(pc.green(`Imported ${written.length} files:`));
+      for (const file of written) {
+        console.log(pc.green(`  + ${file}`));
+      }
+    }
+    return;
+  }
+
+  // --- Subcommand: --template (explicit or auto-detected .claude-template.json) ---
+  const templatePath = args.template || findProjectTemplate(projectDir);
+  if (templatePath) {
+    const template = loadTemplate(templatePath);
+    if (!template) {
+      console.error(pc.red(`Invalid or missing template: ${templatePath}`));
+      process.exit(1);
+    }
+
+    // Write template to a temp file in os.tmpdir and import it
+    const tmpPath = path.join(os.tmpdir(), `.claude-template-import-${Date.now()}.json`);
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(template, null, 2));
+      const written = importConfig(tmpPath, projectDir, args.force);
+      console.log(pc.green(`Applied template: ${written.length} files written`));
+      for (const file of written) {
+        console.log(pc.green(`  + ${file}`));
+      }
+    } finally {
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch {
+        // Cleanup silently
+      }
+    }
+    return;
+  }
 
   // Step 1: Analyze the repository
   console.log(pc.gray("Analyzing repository..."));
@@ -878,7 +1073,7 @@ async function main(): Promise<void> {
   console.log(pc.gray("Setting up .claude/ directory structure..."));
   console.log();
 
-  writeSettings(projectDir, projectInfo.techStack);
+  writeSettings(projectDir, projectInfo.techStack, args.force);
   ensureDirectories(projectDir);
 
   console.log(pc.green("Created:"));
@@ -889,6 +1084,7 @@ async function main(): Promise<void> {
   const success = await runClaudeAnalysis(projectDir, projectInfo, {
     claudeMdMode,
     existingClaudeMd: claudeMdMode === "improve" ? existingClaudeMd : null,
+    noMemory: args.noMemory,
   });
 
   if (!success) {

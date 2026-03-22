@@ -8,6 +8,7 @@ import {
   formatFramework,
   formatLanguage,
   getVersion,
+  isNewerVersion,
   mapFormatter,
   parseArgs,
   promptNewProject,
@@ -17,7 +18,16 @@ import {
 } from "./cli.js";
 import { applyAction, EXTRAS } from "./extras.js";
 import { ensureDirectories, generateSettings, writeSettings } from "./generator.js";
-import { checkHookStatus, checkStatuslineStatus, installHook, installStatusline } from "./hooks.js";
+import { checkHealth } from "./health.js";
+import {
+  checkHookStatus,
+  checkSensitiveHookStatus,
+  checkStatuslineStatus,
+  installHook,
+  installSensitiveHook,
+  installStatusline,
+} from "./hooks.js";
+import { exportConfig, importConfig, loadTemplate } from "./portability.js";
 import { getAnalysisPrompt } from "./prompt.js";
 import {
   extractCommands,
@@ -36,6 +46,25 @@ function createTempDir(): string {
 
 function removeTempDir(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true });
+}
+
+function makeArgs(overrides: Partial<import("./types.js").Args> = {}): import("./types.js").Args {
+  return {
+    help: false,
+    version: false,
+    force: false,
+    interactive: true,
+    verbose: false,
+    refresh: false,
+    tune: false,
+    check: false,
+    noMemory: false,
+    exportPath: null,
+    importPath: null,
+    template: null,
+    profile: null,
+    ...overrides,
+  };
 }
 
 // ============================================================================
@@ -121,6 +150,41 @@ describe("getVersion", () => {
   });
 });
 
+describe("isNewerVersion", () => {
+  it("detects newer major version", () => {
+    expect(isNewerVersion("1.0.0", "2.0.0")).toBe(true);
+  });
+
+  it("detects newer minor version", () => {
+    expect(isNewerVersion("1.0.0", "1.1.0")).toBe(true);
+  });
+
+  it("detects newer patch version", () => {
+    expect(isNewerVersion("1.0.0", "1.0.1")).toBe(true);
+  });
+
+  it("returns false for equal versions", () => {
+    expect(isNewerVersion("1.0.0", "1.0.0")).toBe(false);
+  });
+
+  it("returns false for older version", () => {
+    expect(isNewerVersion("2.0.0", "1.0.0")).toBe(false);
+  });
+
+  it("handles v-prefixed versions", () => {
+    expect(isNewerVersion("v1.0.0", "v1.0.1")).toBe(true);
+    expect(isNewerVersion("v2.0.0", "v1.0.0")).toBe(false);
+  });
+
+  it("handles major precedence over minor", () => {
+    expect(isNewerVersion("1.9.9", "2.0.0")).toBe(true);
+  });
+
+  it("handles minor precedence over patch", () => {
+    expect(isNewerVersion("1.0.9", "1.1.0")).toBe(true);
+  });
+});
+
 describe("showHelp", () => {
   it("displays help without throwing", () => {
     expect(() => showHelp()).not.toThrow();
@@ -135,14 +199,7 @@ describe("showBanner", () => {
 
 describe("promptNewProject", () => {
   it("returns null when not interactive", async () => {
-    const args = {
-      help: false,
-      version: false,
-      force: false,
-      interactive: false,
-      verbose: false,
-      refresh: false,
-    };
+    const args = makeArgs({ interactive: false });
     const result = await promptNewProject(args);
     expect(result).toBeNull();
   });
@@ -166,14 +223,7 @@ describe("promptNewProject", () => {
     // Re-import to get mocked version
     const { promptNewProject: mockedPrompt } = await import("./cli.js");
 
-    const args = {
-      help: false,
-      version: false,
-      force: false,
-      interactive: true,
-      verbose: false,
-      refresh: false,
-    };
+    const args = makeArgs();
 
     const result = await mockedPrompt(args);
     expect(result).not.toBeNull();
@@ -194,14 +244,7 @@ describe("promptNewProject", () => {
 
     const { promptNewProject: mockedPrompt } = await import("./cli.js");
 
-    const args = {
-      help: false,
-      version: false,
-      force: false,
-      interactive: true,
-      verbose: false,
-      refresh: false,
-    };
+    const args = makeArgs();
 
     const result = await mockedPrompt(args);
     expect(result).toBeNull();
@@ -224,14 +267,7 @@ describe("promptNewProject", () => {
 
     const { promptNewProject: mockedPrompt } = await import("./cli.js");
 
-    const args = {
-      help: false,
-      version: false,
-      force: false,
-      interactive: true,
-      verbose: false,
-      refresh: false,
-    };
+    const args = makeArgs();
 
     const result = await mockedPrompt(args);
     expect(result).not.toBeNull();
@@ -255,14 +291,7 @@ describe("promptNewProject", () => {
 
     const { promptNewProject: mockedPrompt } = await import("./cli.js");
 
-    const args = {
-      help: false,
-      version: false,
-      force: false,
-      interactive: true,
-      verbose: false,
-      refresh: false,
-    };
+    const args = makeArgs();
 
     const result = await mockedPrompt(args);
     expect(result?.primaryLanguage).toBe("python");
@@ -2122,10 +2151,11 @@ describe("checkHookStatus", () => {
 // ============================================================================
 
 describe("EXTRAS registry", () => {
-  it("contains safety-hook and statusline", () => {
+  it("contains all registered extras", () => {
     const ids = EXTRAS.map((e) => e.id);
     expect(ids).toContain("safety-hook");
     expect(ids).toContain("statusline");
+    expect(ids).toContain("sensitive-files");
   });
 
   it("each extra has all required fields", () => {
@@ -2283,11 +2313,615 @@ describe("extras skip logic", () => {
     expect(status.projectMatchesOurs).toBe(false);
   });
 
-  it("not installed at project level: both extras return project false", () => {
+  it("not installed at project level: all extras return project false", () => {
     for (const extra of EXTRAS) {
       const status = extra.checkStatus(tempDir);
       expect(status.projectInstalled).toBe(false);
       expect(status.projectMatchesOurs).toBe(false);
     }
+  });
+});
+
+// ============================================================================
+// New Args Parsing Tests
+// ============================================================================
+
+describe("parseArgs (new flags)", () => {
+  it("parses --refresh flag", () => {
+    const args = parseArgs(["--refresh"]);
+    expect(args.refresh).toBe(true);
+  });
+
+  it("parses --tune flag", () => {
+    const args = parseArgs(["--tune"]);
+    expect(args.tune).toBe(true);
+  });
+
+  it("parses --check flag", () => {
+    const args = parseArgs(["--check"]);
+    expect(args.check).toBe(true);
+  });
+
+  it("parses --no-memory flag", () => {
+    const args = parseArgs(["--no-memory"]);
+    expect(args.noMemory).toBe(true);
+  });
+
+  it("parses --export with path", () => {
+    const args = parseArgs(["--export", "/tmp/config.json"]);
+    expect(args.exportPath).toBe("/tmp/config.json");
+  });
+
+  it("returns null for --export without path", () => {
+    const args = parseArgs(["--export"]);
+    expect(args.exportPath).toBeNull();
+  });
+
+  it("parses --import with path", () => {
+    const args = parseArgs(["--import", "/tmp/config.json"]);
+    expect(args.importPath).toBe("/tmp/config.json");
+  });
+
+  it("parses --template with path", () => {
+    const args = parseArgs(["--template", "/tmp/template.json"]);
+    expect(args.template).toBe("/tmp/template.json");
+  });
+
+  it("parses --profile solo", () => {
+    const args = parseArgs(["--profile", "solo"]);
+    expect(args.profile).toBe("solo");
+  });
+
+  it("parses --profile team", () => {
+    const args = parseArgs(["--profile", "team"]);
+    expect(args.profile).toBe("team");
+  });
+
+  it("parses --profile ci", () => {
+    const args = parseArgs(["--profile", "ci"]);
+    expect(args.profile).toBe("ci");
+  });
+
+  it("rejects invalid profile", () => {
+    const args = parseArgs(["--profile", "invalid"]);
+    expect(args.profile).toBeNull();
+  });
+
+  it("ci profile forces non-interactive and noMemory", () => {
+    const args = parseArgs(["--profile", "ci"]);
+    expect(args.profile).toBe("ci");
+    expect(args.interactive).toBe(false);
+    expect(args.noMemory).toBe(true);
+  });
+
+  it("defaults new flags to false/null", () => {
+    const args = parseArgs([]);
+    expect(args.tune).toBe(false);
+    expect(args.check).toBe(false);
+    expect(args.noMemory).toBe(false);
+    expect(args.exportPath).toBeNull();
+    expect(args.importPath).toBeNull();
+    expect(args.template).toBeNull();
+    expect(args.profile).toBeNull();
+  });
+});
+
+// ============================================================================
+// Health Check Tests
+// ============================================================================
+
+describe("checkHealth", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("returns low score for empty project", () => {
+    const result = checkHealth(tempDir);
+    // Some checks pass by default (no rules = no filter violations, no duplication)
+    expect(result.score).toBeLessThan(result.maxScore);
+    expect(result.maxScore).toBeGreaterThan(0);
+    expect(result.items.length).toBeGreaterThan(0);
+    // Key items should fail
+    const claudeMdCheck = result.items.find((i) => i.name === "CLAUDE.md exists");
+    expect(claudeMdCheck?.passed).toBe(false);
+  });
+
+  it("scores CLAUDE.md exists check", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, ".claude", "CLAUDE.md"), "# Test\n\n## Overview\n");
+
+    const result = checkHealth(tempDir);
+    const claudeMdCheck = result.items.find((i) => i.name === "CLAUDE.md exists");
+    expect(claudeMdCheck?.passed).toBe(true);
+    expect(claudeMdCheck?.score).toBe(10);
+  });
+
+  it("detects CLAUDE.md over 120 lines", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    const longContent = Array.from({ length: 150 }, (_, i) => `Line ${i + 1}`).join("\n");
+    fs.writeFileSync(path.join(tempDir, ".claude", "CLAUDE.md"), longContent);
+
+    const result = checkHealth(tempDir);
+    const lengthCheck = result.items.find((i) => i.name === "CLAUDE.md length");
+    expect(lengthCheck?.passed).toBe(false);
+  });
+
+  it("scores settings.json with permissions", () => {
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, ".claude", "settings.json"),
+      JSON.stringify({ permissions: { allow: ["Read(**)", "Edit(**)"] } })
+    );
+
+    const result = checkHealth(tempDir);
+    const settingsCheck = result.items.find((i) => i.name === "settings.json");
+    expect(settingsCheck?.passed).toBe(true);
+    expect(settingsCheck?.score).toBe(5);
+  });
+
+  it("detects agents", () => {
+    const agentsDir = path.join(tempDir, ".claude", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, "code-reviewer.md"), "---\nname: code-reviewer\n---\n");
+    fs.writeFileSync(path.join(agentsDir, "test-writer.md"), "---\nname: test-writer\n---\n");
+
+    const result = checkHealth(tempDir);
+    const agentsCheck = result.items.find((i) => i.name === "Agents");
+    expect(agentsCheck?.passed).toBe(true);
+  });
+
+  it("detects rules without paths filters", () => {
+    const rulesDir = path.join(tempDir, ".claude", "rules");
+    fs.mkdirSync(rulesDir, { recursive: true });
+    fs.writeFileSync(path.join(rulesDir, "bad-rule.md"), "---\n---\nNo paths filter here");
+
+    const result = checkHealth(tempDir);
+    const rulesCheck = result.items.find((i) => i.name === "Rules have paths filters");
+    expect(rulesCheck?.passed).toBe(false);
+  });
+
+  it("passes rules check when all have paths", () => {
+    const rulesDir = path.join(tempDir, ".claude", "rules");
+    fs.mkdirSync(rulesDir, { recursive: true });
+    fs.writeFileSync(path.join(rulesDir, "good-rule.md"), '---\npaths: ["**/*.ts"]\n---\nGood');
+
+    const result = checkHealth(tempDir);
+    const rulesCheck = result.items.find((i) => i.name === "Rules have paths filters");
+    expect(rulesCheck?.passed).toBe(true);
+  });
+
+  it("returns complete health result structure", () => {
+    const result = checkHealth(tempDir);
+    expect(result).toHaveProperty("score");
+    expect(result).toHaveProperty("maxScore");
+    expect(result).toHaveProperty("items");
+    expect(Array.isArray(result.items)).toBe(true);
+
+    for (const item of result.items) {
+      expect(item).toHaveProperty("name");
+      expect(item).toHaveProperty("passed");
+      expect(item).toHaveProperty("score");
+      expect(item).toHaveProperty("maxScore");
+      expect(item).toHaveProperty("message");
+    }
+  });
+
+  it("detects convention duplication between CLAUDE.md and skills", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    const skillsDir = path.join(claudeDir, "skills");
+    fs.mkdirSync(skillsDir, { recursive: true });
+
+    // CLAUDE.md with camelCase convention
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "# Test\n\n## Code Conventions\n\nUse camelCase for variables\n"
+    );
+    // Skill that duplicates camelCase convention
+    fs.writeFileSync(path.join(skillsDir, "style.md"), "---\nname: style\n---\nUse camelCase");
+
+    const result = checkHealth(tempDir);
+    const dupCheck = result.items.find((i) => i.name === "No duplication");
+    expect(dupCheck?.passed).toBe(false);
+    expect(dupCheck?.message).toContain("duplicate");
+  });
+
+  it("passes duplication check when no overlap", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    const skillsDir = path.join(claudeDir, "skills");
+    fs.mkdirSync(skillsDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(claudeDir, "CLAUDE.md"),
+      "# Test\n\n## Code Conventions\n\nUse consistent naming\n"
+    );
+    fs.writeFileSync(
+      path.join(skillsDir, "security.md"),
+      "---\nname: security\n---\nFollow OWASP guidelines"
+    );
+
+    const result = checkHealth(tempDir);
+    const dupCheck = result.items.find((i) => i.name === "No duplication");
+    expect(dupCheck?.passed).toBe(true);
+  });
+});
+
+// ============================================================================
+// Portability Tests
+// ============================================================================
+
+describe("portability", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  describe("exportConfig", () => {
+    it("exports .claude/ directory as JSON", () => {
+      const claudeDir = path.join(tempDir, ".claude");
+      fs.mkdirSync(path.join(claudeDir, "skills"), { recursive: true });
+      fs.writeFileSync(path.join(claudeDir, "CLAUDE.md"), "# Test");
+      fs.writeFileSync(
+        path.join(claudeDir, "settings.json"),
+        JSON.stringify({ permissions: { allow: [] } })
+      );
+      fs.writeFileSync(path.join(claudeDir, "skills", "security.md"), "---\nname: security\n---");
+
+      const outputPath = path.join(tempDir, "export.json");
+      const config = exportConfig(tempDir, outputPath);
+
+      expect(config.claudeMd).toBe("# Test");
+      expect(config.settings).toHaveProperty("permissions");
+      expect(config.skills["security.md"]).toBe("---\nname: security\n---");
+      expect(fs.existsSync(outputPath)).toBe(true);
+    });
+
+    it("handles missing directories gracefully", () => {
+      const outputPath = path.join(tempDir, "export.json");
+      const config = exportConfig(tempDir, outputPath);
+
+      expect(config.claudeMd).toBeNull();
+      expect(config.settings).toBeNull();
+      expect(Object.keys(config.skills).length).toBe(0);
+    });
+  });
+
+  describe("importConfig", () => {
+    it("imports config archive into project", () => {
+      const config = {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        projectName: "test",
+        techStack: {},
+        claudeMd: "# Imported",
+        settings: { permissions: { allow: ["Read(**)"] } },
+        skills: { "test.md": "# Test skill" },
+        agents: {},
+        rules: {},
+        commands: {},
+        hooks: {},
+      };
+
+      const archivePath = path.join(tempDir, "archive.json");
+      fs.writeFileSync(archivePath, JSON.stringify(config));
+
+      const targetDir = path.join(tempDir, "target");
+      fs.mkdirSync(targetDir);
+
+      const written = importConfig(archivePath, targetDir);
+
+      expect(written).toContain(".claude/CLAUDE.md");
+      expect(written).toContain(".claude/settings.json");
+      expect(written).toContain(".claude/skills/test.md");
+      expect(fs.readFileSync(path.join(targetDir, ".claude", "CLAUDE.md"), "utf-8")).toBe(
+        "# Imported"
+      );
+    });
+
+    it("skips existing files without force", () => {
+      const config = {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        projectName: "test",
+        techStack: {},
+        claudeMd: "# New",
+        settings: null,
+        skills: {},
+        agents: {},
+        rules: {},
+        commands: {},
+        hooks: {},
+      };
+
+      const archivePath = path.join(tempDir, "archive.json");
+      fs.writeFileSync(archivePath, JSON.stringify(config));
+
+      // Pre-create CLAUDE.md
+      fs.mkdirSync(path.join(tempDir, "target", ".claude"), { recursive: true });
+      fs.writeFileSync(path.join(tempDir, "target", ".claude", "CLAUDE.md"), "# Original");
+
+      const written = importConfig(archivePath, path.join(tempDir, "target"), false);
+      expect(written).not.toContain(".claude/CLAUDE.md");
+
+      // Original content preserved
+      expect(fs.readFileSync(path.join(tempDir, "target", ".claude", "CLAUDE.md"), "utf-8")).toBe(
+        "# Original"
+      );
+    });
+
+    it("overwrites existing files with force", () => {
+      const config = {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        projectName: "test",
+        techStack: {},
+        claudeMd: "# New",
+        settings: null,
+        skills: {},
+        agents: {},
+        rules: {},
+        commands: {},
+        hooks: {},
+      };
+
+      const archivePath = path.join(tempDir, "archive.json");
+      fs.writeFileSync(archivePath, JSON.stringify(config));
+
+      fs.mkdirSync(path.join(tempDir, "target", ".claude"), { recursive: true });
+      fs.writeFileSync(path.join(tempDir, "target", ".claude", "CLAUDE.md"), "# Original");
+
+      const written = importConfig(archivePath, path.join(tempDir, "target"), true);
+      expect(written).toContain(".claude/CLAUDE.md");
+      expect(fs.readFileSync(path.join(tempDir, "target", ".claude", "CLAUDE.md"), "utf-8")).toBe(
+        "# New"
+      );
+    });
+  });
+
+  describe("loadTemplate", () => {
+    it("loads valid template", () => {
+      const template = {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        projectName: "template",
+        techStack: {},
+        claudeMd: "# Template",
+        settings: null,
+        skills: { "test.md": "content" },
+        agents: {},
+        rules: {},
+        commands: {},
+        hooks: {},
+      };
+
+      const templatePath = path.join(tempDir, "template.json");
+      fs.writeFileSync(templatePath, JSON.stringify(template));
+
+      const loaded = loadTemplate(templatePath);
+      expect(loaded).not.toBeNull();
+      expect(loaded?.projectName).toBe("template");
+    });
+
+    it("returns null for missing file", () => {
+      expect(loadTemplate("/nonexistent/path")).toBeNull();
+    });
+
+    it("returns null for invalid JSON", () => {
+      const badPath = path.join(tempDir, "bad.json");
+      fs.writeFileSync(badPath, "not json");
+      expect(loadTemplate(badPath)).toBeNull();
+    });
+  });
+
+  describe("importConfig path traversal", () => {
+    it("rejects filenames with path traversal", () => {
+      const config = {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        projectName: "evil",
+        techStack: {},
+        claudeMd: null,
+        settings: null,
+        skills: { "../hooks/evil.js": "malicious content" },
+        agents: {},
+        rules: {},
+        commands: {},
+        hooks: {},
+      };
+
+      const archivePath = path.join(tempDir, "evil.json");
+      fs.writeFileSync(archivePath, JSON.stringify(config));
+
+      const targetDir = path.join(tempDir, "target");
+      fs.mkdirSync(targetDir);
+
+      const written = importConfig(archivePath, targetDir);
+
+      // Path traversal file should be rejected
+      expect(written).not.toContain(".claude/skills/../hooks/evil.js");
+      // The file should NOT exist outside the skills directory
+      expect(fs.existsSync(path.join(targetDir, ".claude", "hooks", "evil.js"))).toBe(false);
+    });
+  });
+
+  describe("importConfig error handling", () => {
+    it("returns empty array on malformed JSON input", () => {
+      const badPath = path.join(tempDir, "bad.json");
+      fs.writeFileSync(badPath, "not valid json");
+
+      const written = importConfig(badPath, tempDir);
+      expect(written).toEqual([]);
+    });
+  });
+});
+
+// ============================================================================
+// New Hook Tests
+// ============================================================================
+
+describe("new hooks", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    fs.mkdirSync(path.join(tempDir, ".claude"), { recursive: true });
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("sensitive files hook installs correctly", () => {
+    installSensitiveHook(tempDir);
+    const hookPath = path.join(tempDir, ".claude", "hooks", "protect-sensitive-files.js");
+    expect(fs.existsSync(hookPath)).toBe(true);
+
+    const status = checkSensitiveHookStatus(tempDir);
+    expect(status.projectInstalled).toBe(true);
+    expect(status.projectMatchesOurs).toBe(true);
+  });
+
+  it("EXTRAS registry contains new hooks", () => {
+    const ids = EXTRAS.map((e) => e.id);
+    expect(ids).toContain("sensitive-files");
+  });
+
+  it("EXTRAS has 3 entries total", () => {
+    expect(EXTRAS.length).toBe(3);
+  });
+});
+
+// ============================================================================
+// writeSettings Merge Tests
+// ============================================================================
+
+describe("writeSettings merge", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+  });
+
+  afterEach(() => {
+    removeTempDir(tempDir);
+  });
+
+  it("preserves existing user-added permissions", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, "settings.json"),
+      JSON.stringify({
+        permissions: { allow: ["Read(**)", "Bash(custom:*)"] },
+        customKey: "preserved",
+      })
+    );
+
+    const stack = detectTechStack(tempDir);
+    writeSettings(tempDir, stack);
+
+    const result = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf-8"));
+
+    // User's custom permission preserved
+    expect(result.permissions.allow).toContain("Bash(custom:*)");
+    // User's custom key preserved
+    expect(result.customKey).toBe("preserved");
+    // Generated permissions also present
+    expect(result.permissions.allow).toContain("Read(**)");
+  });
+
+  it("overwrites with force=true", () => {
+    const claudeDir = path.join(tempDir, ".claude");
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, "settings.json"),
+      JSON.stringify({ customKey: "will-be-lost", permissions: { allow: ["Bash(custom:*)"] } })
+    );
+
+    const stack = detectTechStack(tempDir);
+    writeSettings(tempDir, stack, true);
+
+    const result = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf-8"));
+
+    expect(result.customKey).toBeUndefined();
+    expect(result.permissions.allow).not.toContain("Bash(custom:*)");
+  });
+});
+
+// ============================================================================
+// Prompt Enhancement Tests
+// ============================================================================
+
+describe("prompt enhancements", () => {
+  it("includes all 6 agents in the prompt", () => {
+    const projectInfo = analyzeRepository(".");
+    const prompt = getAnalysisPrompt(projectInfo);
+
+    expect(prompt).toContain("code-reviewer.md");
+    expect(prompt).toContain("test-writer.md");
+    expect(prompt).toContain("code-simplifier.md");
+    expect(prompt).toContain("explore.md");
+    expect(prompt).toContain("plan.md");
+    expect(prompt).toContain("docs-writer.md");
+  });
+
+  it("includes all 6 commands in the prompt", () => {
+    const projectInfo = analyzeRepository(".");
+    const prompt = getAnalysisPrompt(projectInfo);
+
+    expect(prompt).toContain("analyze.md");
+    expect(prompt).toContain("code-review.md");
+    expect(prompt).toContain("commit.md");
+    expect(prompt).toContain("fix.md");
+    expect(prompt).toContain("explain.md");
+    expect(prompt).toContain("refactor.md");
+  });
+
+  it("includes memory phase by default", () => {
+    const projectInfo = analyzeRepository(".");
+    const prompt = getAnalysisPrompt(projectInfo);
+
+    expect(prompt).toContain("Phase 8: Seed Initial Memory");
+    expect(prompt).toContain(".claude/memory/");
+  });
+
+  it("excludes memory phase with noMemory option", () => {
+    const projectInfo = analyzeRepository(".");
+    const prompt = getAnalysisPrompt(projectInfo, {
+      claudeMdMode: "replace",
+      existingClaudeMd: null,
+      noMemory: true,
+    });
+
+    expect(prompt).not.toContain("Phase 8: Seed Initial Memory");
+    expect(prompt).toContain("Skip memory seeding");
+  });
+
+  it("includes skill globs guidance", () => {
+    const projectInfo = analyzeRepository(".");
+    const prompt = getAnalysisPrompt(projectInfo);
+
+    expect(prompt).toContain("Skill Globs Reference");
+    expect(prompt).toContain("auto-triggering");
+  });
+
+  it("includes project-specific skill templates", () => {
+    const projectInfo = analyzeRepository(".");
+    const prompt = getAnalysisPrompt(projectInfo);
+
+    expect(prompt).toContain("database-patterns.md");
+    expect(prompt).toContain("docker-patterns.md");
+    expect(prompt).toContain("monorepo-patterns.md");
+    expect(prompt).toContain("cicd-patterns.md");
   });
 });

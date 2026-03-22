@@ -38,7 +38,7 @@
     "format": "biome format --write src/",
     "check": "biome check src/",
     "check:fix": "biome check --write src/",
-    "prepublishOnly": "bun run build && bun run test"
+    "prepublishOnly": "bun run build && bun run test && bun test src/cli.e2e.test.ts"
   },
   "dependencies": {
     "ora": "^9.3.0",

@@ -13,7 +13,7 @@
  * Detection is based on:
  * - File extensions present in the project
  * - Configuration files (package.json, pyproject.toml, etc.)
- * - Lock files (bun.lockb, yarn.lock, etc.)
+ * - Lock files (bun.lock, bun.lockb, yarn.lock, etc.)
  * - Dependency declarations
  *
  * @example
@@ -77,9 +77,9 @@ export function detectTechStack(rootDir: string): TechStack {
 
   // Detect tools
   const packageManager = detectPackageManager(files);
-  const testingFramework = detectTestingFramework(packageJson, files);
+  const testingFramework = detectTestingFramework(packageJson, files, rootDir);
   const linter = detectLinter(packageJson, files);
-  const formatter = detectFormatter(packageJson, files);
+  const formatter = detectFormatter(packageJson, files, rootDir);
   const bundler = detectBundler(packageJson, files);
 
   // Detect project characteristics
@@ -450,7 +450,8 @@ function detectPackageManager(files: string[]): PackageManager | null {
 
 function detectTestingFramework(
   packageJson: Record<string, unknown> | null,
-  files: string[]
+  files: string[],
+  rootDir: string
 ): TestingFramework | null {
   if (packageJson) {
     const allDeps = getAllDeps(packageJson);
@@ -471,7 +472,16 @@ function detectTestingFramework(
   if (files.includes("go.mod")) return "go-test";
   if (files.includes("Cargo.toml")) return "rust-test";
   if (files.includes(".rspec")) return "rspec";
-  if (files.includes("Gemfile") && files.includes("spec")) return "rspec";
+  if (files.includes("Gemfile")) {
+    // Check for spec/ directory or rspec in Gemfile before assuming RSpec
+    if (files.includes("spec")) return "rspec";
+    try {
+      const gemfile = fs.readFileSync(path.join(rootDir, "Gemfile"), "utf-8").toLowerCase();
+      if (gemfile.includes("rspec")) return "rspec";
+    } catch {
+      // Ignore read errors
+    }
+  }
 
   return null;
 }
@@ -503,7 +513,8 @@ function detectLinter(packageJson: Record<string, unknown> | null, files: string
 
 function detectFormatter(
   packageJson: Record<string, unknown> | null,
-  files: string[]
+  files: string[],
+  rootDir: string
 ): Formatter | null {
   if (
     files.some(
@@ -522,9 +533,22 @@ function detectFormatter(
     if (allDeps["@biomejs/biome"]) return "biome";
   }
 
-  // Python formatters — check ruff config files first, then fall back to black
+  // Python formatters — check ruff config files first, then check pyproject.toml contents
   if (files.includes("ruff.toml") || files.includes(".ruff.toml")) return "ruff";
-  if (files.includes("pyproject.toml")) return "black";
+  if (files.includes("pyproject.toml")) {
+    try {
+      const pyproject = fs.readFileSync(path.join(rootDir, "pyproject.toml"), "utf-8");
+      if (pyproject.includes("[tool.ruff.format]") || pyproject.includes("[tool.ruff]")) {
+        return "ruff";
+      }
+      if (pyproject.includes("[tool.black]") || pyproject.includes("black")) {
+        return "black";
+      }
+    } catch {
+      // Ignore read errors
+    }
+    return null;
+  }
 
   return null;
 }

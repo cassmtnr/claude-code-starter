@@ -137,12 +137,42 @@ export function generateSettings(stack: TechStack): { path: string; content: str
 
 /**
  * Write settings.json to the project's .claude/ directory.
+ * If a settings.json already exists, merges generated permissions with existing
+ * settings to preserve user customizations. Use force=true to overwrite entirely.
  */
-export function writeSettings(rootDir: string, stack: TechStack): void {
+export function writeSettings(rootDir: string, stack: TechStack, force = false): void {
   const { path: settingsPath, content } = generateSettings(stack);
   const fullPath = path.join(rootDir, settingsPath);
   const dir = path.dirname(fullPath);
 
   fs.mkdirSync(dir, { recursive: true });
+
+  if (!force && fs.existsSync(fullPath)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(fullPath, "utf-8"));
+      const generated = JSON.parse(content);
+
+      // Merge permissions: union of existing and generated allow lists
+      const existingAllow = existing.permissions?.allow || [];
+      const generatedAllow = generated.permissions?.allow || [];
+      const mergedAllow = [...new Set([...existingAllow, ...generatedAllow])];
+
+      // Preserve all existing keys, overlay generated permissions
+      const merged = {
+        ...existing,
+        $schema: generated.$schema,
+        permissions: {
+          ...existing.permissions,
+          allow: mergedAllow,
+        },
+      };
+
+      fs.writeFileSync(fullPath, JSON.stringify(merged, null, 2));
+      return;
+    } catch {
+      // If existing file is malformed, fall through to overwrite
+    }
+  }
+
   fs.writeFileSync(fullPath, content);
 }

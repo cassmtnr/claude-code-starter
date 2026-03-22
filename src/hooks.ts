@@ -227,25 +227,17 @@ if (require.main === module) {
 // Hook Installation
 // ============================================================================
 
-/**
- * Status of existing hook installations
- */
-export interface HookStatus {
-  projectInstalled: boolean;
-  globalInstalled: boolean;
-  projectMatchesOurs: boolean;
-  globalMatchesOurs: boolean;
-}
+import type { InstallStatus } from "./types.js";
 
 /**
  * Check if the safety hook is already installed at project and global level.
  */
-export function checkHookStatus(rootDir: string): HookStatus {
+export function checkHookStatus(rootDir: string): InstallStatus {
   const homeDir = process.env.HOME || "";
   const projectScriptPath = path.join(rootDir, ".claude", "hooks", "block-dangerous-commands.js");
   const globalScriptPath = path.join(homeDir, ".claude", "hooks", "block-dangerous-commands.js");
 
-  const result: HookStatus = {
+  const result: InstallStatus = {
     projectInstalled: false,
     globalInstalled: false,
     projectMatchesOurs: false,
@@ -255,15 +247,23 @@ export function checkHookStatus(rootDir: string): HookStatus {
   // Check project-level
   if (fs.existsSync(projectScriptPath)) {
     result.projectInstalled = true;
-    const content = fs.readFileSync(projectScriptPath, "utf-8");
-    result.projectMatchesOurs = content.trim() === HOOK_SCRIPT.trim();
+    try {
+      const content = fs.readFileSync(projectScriptPath, "utf-8");
+      result.projectMatchesOurs = content.trim() === HOOK_SCRIPT.trim();
+    } catch {
+      // Ignore read errors (race condition, permissions)
+    }
   }
 
   // Check global-level
   if (fs.existsSync(globalScriptPath)) {
     result.globalInstalled = true;
-    const content = fs.readFileSync(globalScriptPath, "utf-8");
-    result.globalMatchesOurs = content.trim() === HOOK_SCRIPT.trim();
+    try {
+      const content = fs.readFileSync(globalScriptPath, "utf-8");
+      result.globalMatchesOurs = content.trim() === HOOK_SCRIPT.trim();
+    } catch {
+      // Ignore read errors (race condition, permissions)
+    }
   }
 
   return result;
@@ -446,27 +446,17 @@ const STATUSLINE_SCRIPT = [
 // ============================================================================
 
 /**
- * Status of existing statusline installations
- */
-export interface StatuslineStatus {
-  projectInstalled: boolean;
-  globalInstalled: boolean;
-  projectMatchesOurs: boolean;
-  globalMatchesOurs: boolean;
-}
-
-/**
  * Check if a statusline is already installed at project and global level.
  * Compares the script content to determine if it matches our version.
  */
-export function checkStatuslineStatus(rootDir: string): StatuslineStatus {
+export function checkStatuslineStatus(rootDir: string): InstallStatus {
   const homeDir = process.env.HOME || "";
   const projectScriptPath = path.join(rootDir, ".claude", "config", "statusline-command.sh");
   const globalScriptPath = path.join(homeDir, ".claude", "config", "statusline-command.sh");
   const projectSettingsPath = path.join(rootDir, ".claude", "settings.json");
   const globalSettingsPath = path.join(homeDir, ".claude", "settings.json");
 
-  const result: StatuslineStatus = {
+  const result: InstallStatus = {
     projectInstalled: false,
     globalInstalled: false,
     projectMatchesOurs: false,
@@ -547,6 +537,182 @@ export function installStatuslineGlobal(): void {
   patchSettings(settingsPath, {
     statusLine: { type: "command", command: "bash ~/.claude/config/statusline-command.sh" },
   });
+}
+
+// ============================================================================
+// Sensitive File Protection Hook
+// ============================================================================
+
+const SENSITIVE_FILES_HOOK = String.raw`#!/usr/bin/env node
+/**
+ * Protect Sensitive Files - PreToolUse Hook for Write/Edit
+ * Warns before modifying sensitive files (migrations, env, credentials, lock files).
+ */
+
+const path = require('path');
+
+const SENSITIVE_PATTERNS = [
+  { pattern: /\/migrations?\//i, reason: 'migration file — changes may affect database schema' },
+  { pattern: /\.env(\.\w+)?$/, reason: 'environment file — may contain secrets' },
+  { pattern: /\/secrets?\//i, reason: 'secrets directory — may contain credentials' },
+  { pattern: /\/credentials?\//i, reason: 'credentials directory' },
+  { pattern: /\.(pem|key|cert|crt)$/, reason: 'certificate/key file' },
+  { pattern: /package-lock\.json$/, reason: 'lock file — should be managed by package manager' },
+  { pattern: /yarn\.lock$/, reason: 'lock file — should be managed by package manager' },
+  { pattern: /pnpm-lock\.yaml$/, reason: 'lock file — should be managed by package manager' },
+  { pattern: /bun\.lock$/, reason: 'lock file — should be managed by package manager' },
+  { pattern: /Cargo\.lock$/, reason: 'lock file — should be managed by cargo' },
+  { pattern: /poetry\.lock$/, reason: 'lock file — should be managed by poetry' },
+];
+
+async function main() {
+  let input = '';
+  for await (const chunk of process.stdin) input += chunk;
+
+  try {
+    const data = JSON.parse(input);
+    const { tool_name, tool_input } = data;
+
+    if (tool_name !== 'Write' && tool_name !== 'Edit') {
+      return console.log('{}');
+    }
+
+    const filePath = tool_input?.file_path || tool_input?.path || '';
+    const normalized = filePath.replace(/\\/g, '/');
+
+    for (const { pattern, reason } of SENSITIVE_PATTERNS) {
+      if (pattern.test(normalized)) {
+        return console.log(JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'ask',
+            permissionDecisionReason: '\u26A0\uFE0F Sensitive file: ' + reason + ' (' + path.basename(filePath) + ')'
+          }
+        }));
+      }
+    }
+
+    console.log('{}');
+  } catch {
+    console.log('{}');
+  }
+}
+
+if (require.main === module) main();
+`;
+
+/**
+ * Check sensitive files hook status
+ */
+export function checkSensitiveHookStatus(rootDir: string): InstallStatus {
+  const homeDir = process.env.HOME || "";
+  const projectPath = path.join(rootDir, ".claude", "hooks", "protect-sensitive-files.js");
+  const globalPath = path.join(homeDir, ".claude", "hooks", "protect-sensitive-files.js");
+
+  const result: InstallStatus = {
+    projectInstalled: false,
+    globalInstalled: false,
+    projectMatchesOurs: false,
+    globalMatchesOurs: false,
+  };
+
+  if (fs.existsSync(projectPath)) {
+    result.projectInstalled = true;
+    try {
+      result.projectMatchesOurs =
+        fs.readFileSync(projectPath, "utf-8").trim() === SENSITIVE_FILES_HOOK.trim();
+    } catch {
+      // Ignore read errors
+    }
+  }
+
+  if (fs.existsSync(globalPath)) {
+    result.globalInstalled = true;
+    try {
+      result.globalMatchesOurs =
+        fs.readFileSync(globalPath, "utf-8").trim() === SENSITIVE_FILES_HOOK.trim();
+    } catch {
+      // Ignore read errors
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Install sensitive files hook at project level
+ */
+export function installSensitiveHook(rootDir: string): void {
+  const hooksDir = path.join(rootDir, ".claude", "hooks");
+  const hookPath = path.join(hooksDir, "protect-sensitive-files.js");
+  const settingsPath = path.join(rootDir, ".claude", "settings.json");
+
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(hookPath, SENSITIVE_FILES_HOOK);
+  fs.chmodSync(hookPath, 0o755);
+
+  patchHook(settingsPath, "Write", "node .claude/hooks/protect-sensitive-files.js");
+  patchHook(settingsPath, "Edit", "node .claude/hooks/protect-sensitive-files.js");
+}
+
+/**
+ * Install sensitive files hook globally
+ */
+export function installSensitiveHookGlobal(): void {
+  const homeDir = process.env.HOME || "";
+  const hooksDir = path.join(homeDir, ".claude", "hooks");
+  const hookPath = path.join(hooksDir, "protect-sensitive-files.js");
+  const settingsPath = path.join(homeDir, ".claude", "settings.json");
+
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(hookPath, SENSITIVE_FILES_HOOK);
+  fs.chmodSync(hookPath, 0o755);
+
+  patchHook(settingsPath, "Write", "node ~/.claude/hooks/protect-sensitive-files.js");
+  patchHook(settingsPath, "Edit", "node ~/.claude/hooks/protect-sensitive-files.js");
+}
+
+
+// ============================================================================
+// Settings Patching Helpers
+// ============================================================================
+
+/**
+ * Add a PreToolUse hook entry to settings.json for a specific matcher.
+ */
+function patchHook(settingsPath: string, matcher: string, command: string): void {
+  try {
+    const existing = fs.existsSync(settingsPath)
+      ? JSON.parse(fs.readFileSync(settingsPath, "utf-8"))
+      : {};
+
+    const newEntry = {
+      matcher,
+      hooks: [{ type: "command", command }],
+    };
+
+    const existingPreToolUse = Array.isArray(existing.hooks?.PreToolUse)
+      ? existing.hooks.PreToolUse
+      : [];
+
+    const alreadyInstalled = existingPreToolUse.some(
+      (e: { matcher?: string; hooks?: { command?: string }[] }) =>
+        e.matcher === matcher &&
+        Array.isArray(e.hooks) &&
+        e.hooks.some((h) => h.command === command)
+    );
+
+    if (!alreadyInstalled) {
+      existing.hooks = {
+        ...existing.hooks,
+        PreToolUse: [...existingPreToolUse, newEntry],
+      };
+      fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2));
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "unknown error";
+    console.error(`  Warning: could not patch settings.json (${msg}) — add hook config manually`);
+  }
 }
 
 /**
