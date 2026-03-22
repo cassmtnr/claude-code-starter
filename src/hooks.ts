@@ -672,7 +672,6 @@ export function installSensitiveHookGlobal(): void {
   patchHook(settingsPath, "Edit", "node ~/.claude/hooks/protect-sensitive-files.js");
 }
 
-
 // ============================================================================
 // Settings Patching Helpers
 // ============================================================================
