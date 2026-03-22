@@ -1,3 +1,9 @@
+## [0.17.0](https://github.com/cassmtnr/claude-code-starter/compare/0.16.0...0.17.0) (2026-03-22)
+
+### Features
+
+* check for newest version ([48353ec](https://github.com/cassmtnr/claude-code-starter/commit/48353eccd4a57af9a49bd0d94b6ec787e1a03654))
+
 ## [0.16.0](https://github.com/cassmtnr/claude-code-starter/compare/0.15.0...0.16.0) (2026-03-14)
 
 ### Features
