@@ -39,7 +39,7 @@ your-project/
 
 | Component | Technology |
 |-----------|------------|
-| Runtime | Bun (local dev) / Node.js 18+ (distribution) |
+| Runtime | Bun (local dev) / Node.js 22.14+ (distribution) |
 | Language | TypeScript (strict mode) |
 | Build | tsup (ESM output) |
 | Testing | bun:test |

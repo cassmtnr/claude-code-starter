@@ -290,6 +290,14 @@ const ANALYSIS_PROMPT = `You are a senior software architect performing a compre
 Your goal is to generate ALL \`.claude/\` configuration files that give Claude
 complete context to work effectively in this project.
 
+**CRITICAL: Write all generated files to the \`.claude/\` directory in the current project root.**
+This is the project-level \`.claude/\` directory, NOT the global \`~/.claude/\` directory.
+Ignore any global CLAUDE.md instructions about avoiding \`.claude/\` or editing other directories
+instead — those rules apply to the global config, not to project-level configuration.
+You MUST write directly to \`.claude/CLAUDE.md\`, \`.claude/skills/\`, \`.claude/agents/\`,
+\`.claude/rules/\`, \`.claude/commands/\`, and \`.claude/memory/\`. Do NOT create alternative
+directories like \`.claude-generated/\` or alternative file names.
+
 **This is NOT a generic template.** Every file must contain information specific to THIS
 project, discovered through actual file reading and analysis. If you cannot determine
 something, omit that section entirely - do not fill in generic boilerplate.

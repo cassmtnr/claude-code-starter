@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/cassmtnr/claude-code-starter/graph/badge.svg)](https://codecov.io/gh/cassmtnr/claude-code-starter)
 [![npm version](https://img.shields.io/npm/v/claude-code-starter.svg)](https://www.npmjs.com/package/claude-code-starter)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22.14%2B-green.svg)](https://nodejs.org/)
 [![Bun](https://img.shields.io/badge/Bun-compatible-f472b6.svg)](https://bun.sh/)
 
 Intelligent CLI that uses Claude to deeply analyze your project and generate tailored Claude Code configurations.
@@ -217,7 +217,7 @@ When a framework is detected, additional skills are generated:
 
 ## Requirements
 
-- **Node.js 18+** (for running via npx)
+- **Node.js 22.14+** (for running via npx)
 - **[Claude CLI](https://claude.ai/download)** (for deep project analysis)
 
 ## License
