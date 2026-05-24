@@ -1,3 +1,26 @@
+## [1.0.0](https://github.com/cassmtnr/claude-code-starter/compare/0.17.0...1.0.0) (2026-05-24)
+
+### ⚠ BREAKING CHANGES
+
+* Minimum supported Node version is now 22.14.0. Users
+  on Node 18-22.13 must upgrade. The CLI is built with tsup target node22
+  and depends on toolchain (commitlint 21, semantic-release 25 transitively)
+  that requires Node 22.14+.
+
+  Spec: docs/superpowers/plans/phase-10-deps-toolchain-bump.md
+
+### Features
+
+* drop Node 18 support, require Node 22.14+ ([451413f](https://github.com/cassmtnr/claude-code-starter/commit/451413ff1cc0a650229cb350b3c8e3574bac8813))
+
+### Bug Fixes
+
+* prevent analyzer subprocess from inheriting global CLAUDE.md collisions ([d645d08](https://github.com/cassmtnr/claude-code-starter/commit/d645d08b42c30b13c4cb35ee1a5ec87d44c53f0d))
+
+### Documentation
+
+* spec phase 10 deps & toolchain bump ([1c62603](https://github.com/cassmtnr/claude-code-starter/commit/1c62603ba3aff08dbcfe90b5ecdc4ce5735ce40a))
+
 ## [0.17.0](https://github.com/cassmtnr/claude-code-starter/compare/0.16.0...0.17.0) (2026-03-22)
 
 ### Features
