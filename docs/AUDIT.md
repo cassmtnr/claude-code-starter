@@ -471,6 +471,8 @@ LICENSE, README.md, dist/cli.js, package.json (4 files, 132KB)
 
 ### L4. `tsup.config.ts` targets `esnext` but `engines` says `>=18.0.0`
 
+> **Resolved by Phase 10 (deps & toolchain bump).** The recommended fix (`target: "node18"`) was applied, then superseded — current target is `node22` with engine floor `>=22.14.0`. See `docs/superpowers/plans/phase-10-deps-toolchain-bump.md`.
+
 - **Severity**: Low
 - **Category**: Distribution Bug
 - **File**: `tsup.config.ts:7`, `package.json:61`

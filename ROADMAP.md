@@ -28,6 +28,8 @@
 
 ---
 
+> **Numbering convention:** Phases 1–9 below track in-feature work. Phases 10+ (see `docs/superpowers/plans/phase-10-*` etc.) track codebase overhaul work and live in separate spec files.
+
 ## Phase 1: Reliability Fixes
 
 Items from the [Staff Engineer Reliability Audit](docs/AUDIT.md). Each is independent and can be tackled in any order.
