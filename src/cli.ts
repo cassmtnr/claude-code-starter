@@ -687,6 +687,11 @@ export function runClaudeAnalysis(
         "-p",
         "--verbose",
         "--output-format=stream-json",
+        // Append (not replace) so Claude Code's default agentic-loop guidance is preserved.
+        // The override exists because user global CLAUDE.md files often forbid writing to
+        // `.claude/`, which contradicts this tool's entire purpose.
+        "--append-system-prompt",
+        "You are a senior software architect. Your task is to analyze a codebase and generate configuration files. Use only the tools provided: Read, Glob, Grep, Write, Edit. Write all generated files to the `.claude/` directory in the current project root. Do NOT create alternative directories. Do NOT invoke any skills, commands, or agents. Focus exclusively on the task described in the user message.",
         "--allowedTools",
         "Read",
         "--allowedTools",
@@ -713,6 +718,7 @@ export function runClaudeAnalysis(
 
     // Parse streaming JSON to update spinner with tool activity
     let stdoutBuffer = "";
+    let lastResultMessage = "";
     child.stdout.on("data", (chunk: Buffer) => {
       stdoutBuffer += chunk.toString();
       const lines = stdoutBuffer.split("\n");
@@ -722,6 +728,11 @@ export function runClaudeAnalysis(
         if (!line.trim()) continue;
         try {
           const event = JSON.parse(line);
+
+          // Capture result message for error reporting
+          if (event.type === "result" && event.result) {
+            lastResultMessage = event.result;
+          }
 
           // Tool events are in message.content[] with type "tool_use"
           if (event.type === "assistant" && Array.isArray(event.message?.content)) {
@@ -771,6 +782,9 @@ export function runClaudeAnalysis(
         resolve(true);
       } else {
         spinner.fail(`Claude exited with code ${code}`);
+        if (lastResultMessage) {
+          console.error(pc.yellow(lastResultMessage));
+        }
         if (stderrOutput.trim()) {
           console.error(pc.gray(stderrOutput.trim()));
         }
