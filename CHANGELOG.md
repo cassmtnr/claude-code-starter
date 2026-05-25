@@ -1,3 +1,13 @@
+## [2.1.0](https://github.com/cassmtnr/claude-code-starter/compare/2.0.0...2.1.0) (2026-05-25)
+
+### Features
+
+* phase 11 reliability fixes (audit closure) ([906eb08](https://github.com/cassmtnr/claude-code-starter/commit/906eb08954eee04a0daa570ee98513fb9da9064e))
+
+### Documentation
+
+* spec + plan for phase 11 reliability fixes ([ad3b1e4](https://github.com/cassmtnr/claude-code-starter/commit/ad3b1e4772a0d74bf0cbe1b137f0588b79e2ca76))
+
 ## [2.0.0](https://github.com/cassmtnr/claude-code-starter/compare/1.0.0...2.0.0) (2026-05-24)
 
 ### ⚠ BREAKING CHANGES
