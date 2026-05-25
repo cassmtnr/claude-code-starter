@@ -642,16 +642,33 @@ export function formatFramework(fw: Framework): string {
 // Claude CLI Integration
 // ============================================================================
 
+let cachedClaudeVersion: string | null = null;
+
 /**
- * Check if the Claude CLI is installed and accessible
+ * Verify claude CLI is installed and reachable. Caches the version string
+ * for later surfacing in error output if runClaudeAnalysis fails.
  */
 export function checkClaudeCli(): boolean {
   try {
-    execSync("claude --version", { stdio: "ignore" });
+    cachedClaudeVersion = execSync("claude --version", {
+      encoding: "utf-8",
+      env: process.env,
+    }).trim();
     return true;
   } catch {
+    cachedClaudeVersion = null;
     return false;
   }
+}
+
+/** Returns the cached claude CLI version string, or null if check failed / not run yet. */
+export function getClaudeVersion(): string | null {
+  return cachedClaudeVersion;
+}
+
+/** Test-only: reset cached version between tests. Not part of public API. */
+export function resetCachedClaudeVersion(): void {
+  cachedClaudeVersion = null;
 }
 
 /**
@@ -770,6 +787,10 @@ export function runClaudeAnalysis(
 
     child.on("error", (err) => {
       spinner.fail(`Failed to launch Claude CLI: ${err.message}`);
+      const version = getClaudeVersion();
+      if (version) {
+        console.error(pc.gray(`(claude CLI: ${version})`));
+      }
       resolve(false);
     });
 
@@ -784,6 +805,10 @@ export function runClaudeAnalysis(
         spinner.fail(`Claude exited with code ${code}`);
         if (lastResultMessage) {
           console.error(pc.yellow(lastResultMessage));
+        }
+        const version = getClaudeVersion();
+        if (version) {
+          console.error(pc.gray(`(claude CLI: ${version})`));
         }
         if (stderrOutput.trim()) {
           console.error(pc.gray(stderrOutput.trim()));
@@ -838,7 +863,8 @@ async function main(): Promise<void> {
   showBanner();
   checkForUpdate();
 
-  const projectDir = process.cwd();
+  // Resolve symlinks so analyzer's readdir results match the path we write to.
+  const projectDir = fs.realpathSync(process.cwd());
 
   // --- Subcommand: --check (health audit, exit with score) ---
   if (args.check) {

@@ -282,6 +282,8 @@ npx claude-code-starter -y  # Overwrites settings.json
 
 ### M1. `formatFramework` missing display names for 10 frameworks
 
+> **Resolved.** All 10 missing display names are present in `formatFramework` (`src/cli.ts:614-624`), and tests for each exist and pass at `src/cli.test.ts:395-434`. Re-validated 2026-05-25 during Phase 11. See `docs/superpowers/plans/phase-11-reliability-fixes.md`.
+
 - **Severity**: Medium
 - **Category**: Runtime Failure (cosmetic)
 - **File**: `src/cli.ts:307-352`
@@ -324,6 +326,8 @@ This can misidentify the formatter for any Python project with a `pyproject.toml
 ---
 
 ### M3. `detectTestingFramework` incorrectly assumes RSpec for all Ruby projects
+
+> **Resolved.** `src/analyzer.ts:474-484` checks for `.rspec` file, then `spec/` directory, then reads `Gemfile` for "rspec" string. Returns `null` for Minitest-only projects (no specific Minitest detection added — but `null` is correct for "unknown framework"). Re-validated 2026-05-25 during Phase 11.
 
 - **Severity**: Medium
 - **Category**: Runtime Failure
