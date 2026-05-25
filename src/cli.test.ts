@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { analyzeRepository, detectTechStack, summarizeTechStack } from "./analyzer.js";
+import {
+  analyzeRepository,
+  detectFormatter,
+  detectTechStack,
+  summarizeTechStack,
+} from "./analyzer.js";
 import {
   checkClaudeCli,
   formatFramework,
@@ -12,6 +17,8 @@ import {
   mapFormatter,
   parseArgs,
   promptNewProject,
+  resetCachedClaudeVersion,
+  runClaudeAnalysis,
   showBanner,
   showHelp,
   showTechStack,
@@ -29,6 +36,7 @@ import {
 } from "./hooks.js";
 import { exportConfig, importConfig, loadTemplate } from "./portability.js";
 import { getAnalysisPrompt } from "./prompt.js";
+import type { ProjectInfo } from "./types.js";
 import {
   extractCommands,
   extractConventionFingerprints,
@@ -65,6 +73,36 @@ function makeArgs(overrides: Partial<import("./types.js").Args> = {}): import(".
     profile: null,
     ...overrides,
   };
+}
+
+/**
+ * Run `fn` with PATH set up to resolve `claude` to a fake binary fixture
+ * (or to no binary at all, for ENOENT tests). Restores PATH and resets
+ * cached version state on exit, even if `fn` throws.
+ */
+async function withFakeClaude(
+  variant: "success" | "error" | "slow" | null,
+  fn: () => Promise<void>
+): Promise<void> {
+  const originalPath = process.env.PATH;
+  try {
+    if (variant === null) {
+      const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "no-claude-"));
+      process.env.PATH = emptyDir;
+    } else {
+      const fixtureDir = path.join(__dirname, "__fixtures__");
+      // Symlink the requested variant to a `claude` name so spawn("claude") finds it.
+      const linkDir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-claude-"));
+      const target = path.join(fixtureDir, `fake-claude-${variant}.sh`);
+      fs.symlinkSync(target, path.join(linkDir, "claude"));
+      process.env.PATH = `${linkDir}:${originalPath}`;
+    }
+    resetCachedClaudeVersion();
+    await fn();
+  } finally {
+    process.env.PATH = originalPath;
+    resetCachedClaudeVersion();
+  }
 }
 
 // ============================================================================
@@ -2923,5 +2961,145 @@ describe("prompt enhancements", () => {
     expect(prompt).toContain("docker-patterns.md");
     expect(prompt).toContain("monorepo-patterns.md");
     expect(prompt).toContain("cicd-patterns.md");
+  });
+});
+
+// ============================================================================
+// runClaudeAnalysis / checkClaudeCli / main (Phase 11 H3 + H5 + M8)
+// ============================================================================
+
+describe("runClaudeAnalysis (Phase 11 H3)", () => {
+  beforeEach(() => {
+    resetCachedClaudeVersion();
+  });
+
+  const minimalProjectInfo = {
+    isExisting: true,
+    fileCount: 1,
+    techStack: {
+      languages: [],
+      primaryLanguage: null,
+      frameworks: [],
+      primaryFramework: null,
+      packageManager: null,
+      testingFramework: null,
+      linter: null,
+      formatter: null,
+      bundler: null,
+      isMonorepo: false,
+      hasDocker: false,
+      hasCICD: false,
+      cicdPlatform: null,
+      hasClaudeConfig: false,
+      existingClaudeFiles: [],
+    },
+    rootDir: "/tmp/test",
+    name: "test-project",
+    description: null,
+  } satisfies ProjectInfo;
+
+  it("returns true on success exit (code 0)", async () => {
+    await withFakeClaude("success", async () => {
+      const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), "p11-h3-success-"));
+      try {
+        const result = await runClaudeAnalysis(tmpProject, minimalProjectInfo);
+        expect(result).toBe(true);
+      } finally {
+        fs.rmSync(tmpProject, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it("returns false on non-zero exit code", async () => {
+    await withFakeClaude("error", async () => {
+      const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), "p11-h3-error-"));
+      try {
+        const result = await runClaudeAnalysis(tmpProject, minimalProjectInfo);
+        expect(result).toBe(false);
+      } finally {
+        fs.rmSync(tmpProject, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it("returns false when claude binary is not on PATH (ENOENT)", async () => {
+    await withFakeClaude(null, async () => {
+      const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), "p11-h3-enoent-"));
+      try {
+        const result = await runClaudeAnalysis(tmpProject, minimalProjectInfo);
+        expect(result).toBe(false);
+      } finally {
+        fs.rmSync(tmpProject, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it("returns false when SIGTERM is received during run (slow variant)", async () => {
+    await withFakeClaude("slow", async () => {
+      const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), "p11-h3-slow-"));
+      // Fire SIGTERM after a short delay so the spawn is alive when signaled.
+      const sigTimer = setTimeout(() => {
+        process.emit("SIGTERM" as NodeJS.Signals);
+      }, 200);
+      try {
+        const result = await runClaudeAnalysis(tmpProject, minimalProjectInfo);
+        // Either false (exit !== 0 from kill) is the expected non-success outcome.
+        expect(result).toBe(false);
+      } finally {
+        clearTimeout(sigTimer);
+        fs.rmSync(tmpProject, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it("M8: surfaces cached claude version on non-zero exit", async () => {
+    await withFakeClaude("error", async () => {
+      // Populate cachedClaudeVersion via checkClaudeCli (fake binary is on PATH)
+      checkClaudeCli();
+      const captured: string[] = [];
+      const orig = console.error;
+      console.error = (msg: string) => captured.push(msg);
+      const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), "p11-m8-"));
+      try {
+        await runClaudeAnalysis(tmpProject, minimalProjectInfo);
+        const versionLine = captured.find((m) => m.includes("fake-claude 0.0.0-test"));
+        expect(versionLine).toBeDefined();
+      } finally {
+        console.error = orig;
+        fs.rmSync(tmpProject, { recursive: true, force: true });
+      }
+    });
+  });
+});
+
+describe("detectFormatter Python (Phase 11 M2)", () => {
+  it("returns black (not ruff) when only [tool.ruff] linter config is present", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "p11-m2-rufflint-"));
+    fs.writeFileSync(
+      path.join(tmpDir, "pyproject.toml"),
+      "[tool.ruff]\nline-length = 100\n\n[tool.black]\nline-length = 100\n"
+    );
+    const formatter = detectFormatter(null, ["pyproject.toml"], tmpDir);
+    expect(formatter).toBe("black");
+  });
+
+  it("does not return black when 'black' appears only in a comment", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "p11-m2-comment-"));
+    fs.writeFileSync(
+      path.join(tmpDir, "pyproject.toml"),
+      "# This project does not use black or ruff\n[tool.poetry]\nname = 'x'\n"
+    );
+    const formatter = detectFormatter(null, ["pyproject.toml"], tmpDir);
+    expect(formatter).toBe(null);
+  });
+
+  it("returns ruff when [tool.ruff.format] is configured", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "p11-m2-ruff-"));
+    fs.writeFileSync(
+      path.join(tmpDir, "pyproject.toml"),
+      "[tool.ruff]\nline-length = 100\n\n[tool.ruff.format]\nquote-style = 'double'\n"
+    );
+    const formatter = detectFormatter(null, ["pyproject.toml"], tmpDir);
+    expect(formatter).toBe("ruff");
   });
 });

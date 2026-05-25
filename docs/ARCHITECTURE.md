@@ -97,6 +97,8 @@ Repository analysis and tech stack detection:
 - `detectBundler()` - Webpack, Vite, tsup, etc.
 - `detectCICD()` - GitHub Actions, GitLab CI, etc.
 
+**Known limitation — root-only file scan:** `listRootFiles` only reads the project root directory. Subdirectory config files (e.g., `app/build.gradle.kts`, `backend/requirements.txt`) are not auto-discovered — language and framework detection relies on root-level markers plus a handful of explicit subdir checks inside `detectFrameworks`. Extending root-file enumeration to scan more directories would change behavior for many projects and is deliberately out of scope (audit finding M7, documented rather than fixed).
+
 ### `src/generator.ts`
 
 Minimal deterministic artifact generation (~156 lines). Only handles non-AI-generated artifacts:

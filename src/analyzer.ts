@@ -511,7 +511,7 @@ function detectLinter(packageJson: Record<string, unknown> | null, files: string
   return null;
 }
 
-function detectFormatter(
+export function detectFormatter(
   packageJson: Record<string, unknown> | null,
   files: string[],
   rootDir: string
@@ -538,12 +538,10 @@ function detectFormatter(
   if (files.includes("pyproject.toml")) {
     try {
       const pyproject = fs.readFileSync(path.join(rootDir, "pyproject.toml"), "utf-8");
-      if (pyproject.includes("[tool.ruff.format]") || pyproject.includes("[tool.ruff]")) {
-        return "ruff";
-      }
-      if (pyproject.includes("[tool.black]") || pyproject.includes("black")) {
-        return "black";
-      }
+      // Anchored to line start (multiline) so we match section headers,
+      // not substrings in comments or unrelated tables.
+      if (/^\[tool\.ruff\.format\]/m.test(pyproject)) return "ruff";
+      if (/^\[tool\.black\]/m.test(pyproject)) return "black";
     } catch {
       // Ignore read errors
     }
@@ -768,7 +766,9 @@ function countSourceFiles(rootDir: string): number {
 
   let count = 0;
   function countFiles(dir: string, depth = 0): void {
-    if (depth > 5) return; // Increased depth for more accurate count
+    // Bumped from 5 (6 levels) to 10 (11 levels) for deep monorepos like
+    // packages/*/src/modules/auth/handlers/.
+    if (depth > 10) return;
     try {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         if (shouldIgnore(entry.name)) continue;
