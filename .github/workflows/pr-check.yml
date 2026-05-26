@@ -9,6 +9,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Opt actions/* into Node 24 ahead of GitHub's forced switch on 2026-06-02.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   lint:
     name: Lint & Format
@@ -118,7 +122,7 @@ jobs:
         run: bun test src/cli.test.ts --coverage --coverage-reporter=lcov
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
@@ -156,20 +160,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check for console.log (except warn/error)
-        run: |
-          # Find console.log statements (excluding console.warn, console.error, console.info)
-          # Exclude test files and node_modules
-          if grep -rn "console\.log" --include="*.ts" --include="*.js" --exclude-dir=node_modules --exclude="*.test.ts" --exclude="*.spec.ts" src/ 2>/dev/null; then
-            echo "::warning::Found console.log statements in source code. Consider removing or using console.warn/error instead."
-          fi
-
-      - name: Check for 'any' type usage
-        run: |
-          # Check for explicit 'any' type annotations
-          if grep -rn ": any" --include="*.ts" --exclude-dir=node_modules src/ 2>/dev/null; then
-            echo "::warning::Found explicit 'any' type annotations. Consider using specific types."
-          fi
+      # Note: removed `console.log` and `: any` grep checks (2026-05-27).
+      # Both produced false positives:
+      #   - console.log: project standard wraps pc (picocolors) calls in console.log
+      #     for colored output (see CLAUDE.md). Grep flagged every legitimate use.
+      #   - `: any`: matched English prose in JSDoc comments (e.g., "cautionary: any
+      #     force push"). Real `any` types are caught by TypeScript strict + Biome's
+      #     noExplicitAny rule in the lint job above.
 
       - name: Check for skipped tests
         run: |
