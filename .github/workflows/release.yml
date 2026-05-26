@@ -9,6 +9,10 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  # Opt actions/* into Node 24 ahead of GitHub's forced switch on 2026-06-02.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   # Safety check - run full test suite before releasing
   test:
@@ -47,7 +51,7 @@ jobs:
         run: bun run test:e2e
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
